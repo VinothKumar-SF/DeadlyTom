@@ -1,0 +1,3157 @@
+
+OBJECT Tab:
+
+== Component ==
+
+<aura:component controller ="PickListController" implements="lightning:actionOverride,flexipage:availableForRecordHome,force:hasRecordId" access="global">
+    <aura:attribute name="allObject" type="list" />
+    <aura:attribute name="disabledChildField" type="boolean" default="true"/>
+    <aura:attribute name="pickListValues" type="list" />
+    <aura:attribute name="forceRecord" type="Object__c" default="{'sObject Name' : 'Object__c',
+                                                                 'Name' : '',
+                                                                 'pickListValues' : '',
+                                                                 'propDescription' : '',
+                                                                 'propActive' : ''}"/>
+    <aura:attribute name="modalContext" type="String" default="New" />
+    
+    <force:recordData aura:id="recordHandler" 
+                      recordId="{!v.recordId}"
+                      targetFields="{!v.forceRecord}"
+                      fields="Datastore__c, Name, Description__c, Active__c"
+                      mode="EDIT" />
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+    
+    <!-- Popup -->
+    
+    
+    <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open"/>
+    
+    <c:PickListValues sObjectName="Object__c" fieldName="Datastore__c"  pickListValues="{!v.pickListValues}" />
+    <div aura:id="editDialog" role="dialog" tabindex="-1" aria-labelledby="header43" class="slds-modal slds-fade-in-open">
+        <div class="slds-modal__container">
+            
+            <div class="slds-modal__header">
+                <lightning:buttonIcon iconName="utility:close" onclick="{! c.closeEventPopup }"
+                                      alternativeText="Close window"
+                                      variant="bare-inverse"
+                                      class="slds-modal__close"/>
+                
+                <h2 class="slds-text-heading--medium">{!v.modalContext} Object</h2>
+                </div>
+            <div class="slds-modal__content slds-p-around--large slds-grid slds-wrap ">
+               
+                <lightning:select  aura:id="Datastore" name="Datastore" required="true" value="{!v.forceRecord.Datastore__c}" onchange="{!c.handleChange}" label="Datastore" class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                    <option value="">--None--</option>
+                    <aura:iteration items="{!v.pickListValues}" var="List">
+                        <aura:if isTrue="{!v.forceRecord.Datastore__c == List }">
+                            <option value="{!List}" selected="selected">{!List}</option>
+                            <aura:set attribute="else"> 
+                                <option value="{!List}">{!List}</option>
+                            </aura:set>
+                        </aura:if>	
+                    </aura:iteration>
+                </lightning:select>
+                <aura:if isTrue="{!v.forceRecord.Datastore__c == 'Salesforce'}">
+                    <lightning:select name="objects" label="Object Name" value="{!v.forceRecord.Name}" aura:id="objectId" required="true" disabled="{!v.disabledChildField}"  class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                        <option value=""></option>
+                        <aura:iteration items="{!v.allObject}" var="object">
+                            <aura:if isTrue="{!v.forceRecord.Name == object }">
+                                <option value="{!object}" selected="selected">{!object}</option>
+                                <aura:set attribute="else">
+                                    <option value="{!object}">{!object}</option>
+                                </aura:set></aura:if>
+                        </aura:iteration>
+                    </lightning:select>
+                    <aura:set attribute="else">
+                        <lightning:input name="objects" label="Object Name" value="{!v.forceRecord.Name}" type="text" required="true" aura:id="objectId" disabled="{!v.disabledChildField}"  class="slds-size--1-of-2 slds-p-horizontal_x-small"/>
+                    </aura:set>
+                </aura:if>   
+                <lightning:textarea aura:id="propDescription" name="propDescription" type="Text" value="{!v.forceRecord.Description__c}" label="Description" class="slds-size--1-of-2 slds-p-horizontal_x-small" />
+                <lightning:input aura:id="propActive" name="propActive" value="{!v.forceRecord.Active__c}" type="Checkbox" checked = "true" label="Active" class="slds-size--1-of-2 slds-p-bottom_x-large slds-p-top_x-large" />
+            </div>
+            <div class="slds-modal__footer">                
+                <lightning:button variant="neutral" label="Cancel" onclick="{!c.cancelDialog}"/>
+                <lightning:button variant="brand" label="Save" onclick="{!c.saveForce}" />
+            </div>
+        </div>
+    </div>
+    <div aura:id="overlay" class="slds-backdrop slds-backdrop--open"></div>
+</aura:component>
+
+
+
+=== Helper  ===
+
+({
+    confirmlist : function(component, event, helper) {
+        var isValid = true;
+        var confirmRecord = component.get("v.forceRecord")
+        console.log('new-->', confirmRecord)
+        //!$A.util.isEmpty
+        if (confirmRecord.Datastore__c == null || confirmRecord.Datastore__c == '' || confirmRecord.Datastore__c == undefined){
+            var toastEvent = $A.get("e.force:showToast");
+            isValid = false;
+            toastEvent.setParams({
+                title : 'Error',
+                message:'The required fields cannot left blank',
+                duration:' 5000',
+                key: 'info_alt',
+                type: 'error',
+                mode: 'pester'});
+            toastEvent.fire();
+        }
+        else if(confirmRecord.Name == null || confirmRecord.Name == '' || confirmRecord.Name == undefined){
+            var toastEvent = $A.get("e.force:showToast");
+            isValid = false;
+            toastEvent.setParams({
+                title : 'Error',
+                message:'The required fields cannot left blank',
+                duration:' 5000',
+                key: 'info_alt',
+                type: 'error',
+                mode: 'pester'});
+            toastEvent.fire();
+        } else {
+            console.log('No Error');
+        }
+        return isValid;
+    },
+    
+    saveNew : function (component,event,helper){
+        let button = event.getSource();
+    	button.set('v.disabled',true);
+        var tempRec = component.find("recordHandler");
+        tempRec.saveRecord($A.getCallback(function(saveResult){
+            if (saveResult.state === "SUCCESS") {
+                var recId = saveResult.recordId;
+                helper.navigateTo(component,event,helper,recId);
+            } else if (saveResult.state === "ERROR") {
+                console.log('Error: ' + JSON.stringify(saveResult.error));
+                helper.showError(component, event, helper);
+                
+            } else {
+                console.log('Unknown problem, state: ' + saveResult.state + ', error: ' + JSON.stringify(result.error));
+            }   }));
+        
+    },
+    
+    
+    nextAction : function(component, event, helper) {    
+        var action = component.get("c.getAllObject");
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            if (state === "SUCCESS" || state === "DRAFT") {
+                var result = response.getReturnValue();
+                console.log(result);
+                component.set("v.allObject", result);
+            }else if (status === "INCOMPLETE") {
+                console.log("No response from server or client is offline.");
+            }else if (status === "ERROR") {
+                if (errors) {
+                    if (errors[0] && errors[0].message) {
+                        console.log("Error message: " + errors[0].message);
+                    }
+                } else {
+                    console.log("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    showConfirmationToast : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": "Success!",
+            "type" : 'success',
+            "mode" : 'dismissible',
+            "duration" : 5000,
+            "message": "The record has been saved successfully."
+        });
+        toastEvent.fire();
+    },
+    
+    showError : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            title : 'Error',
+            message:'The required fields cannot left blank',
+            duration:' 5000',
+            key: 'info_alt',
+            type: 'error',
+            mode: 'pester'
+        });
+        toastEvent.fire();
+    },
+    
+    navigateTo: function(component,event,helper,recId) {
+        var navEvt = $A.get("e.force:navigateToSObject");
+        navEvt.setParams({
+            "recordId" : recId
+        });
+        navEvt.fire();
+    }
+    
+})
+
+===  Controller ===
+
+
+({
+    doInit : function(component, event, helper) {
+        
+        var recId = component.get("v.recordId");
+        if(recId) {
+            component.set("v.modalContext", "Edit");
+        }
+        if(!recId){
+            component.find("recordHandler").getNewRecord(
+                "Object__c",null,false,
+                $A.getCallback (function() {
+                    var rec = component.get("v.forceRecord");
+                    var error = component.get("v.recordError");
+                    if (error || (rec === null)) {
+                        console.log("Error initializing record template: " + error);
+                        return;
+                    }
+                }));
+        }
+    
+        helper.nextAction(component, event, helper);
+    },
+    
+    handleChange : function(component, helper, event){
+        var Changefield = component.find("Datastore").get("v.value");
+        
+        if(Changefield == '' || Changefield == '--None--'){
+            component.set("v.disabledChildField" , true);  
+        }
+        else{
+            component.set("v.disabledChildField" , false); 
+        }
+    },
+    
+    saveForce : function (component,event,helper){
+        if(helper.confirmlist(component, event, helper)){
+            helper.saveNew(component, event, helper);
+            helper.showConfirmationToast(component, event, helper);
+            
+        }
+    },
+    
+    cancelDialog : function(component, event, helper) {
+        var recId = component.get("v.recordId");
+        if(!recId){
+            var homeEvt = $A.get("e.force:navigateToObjectHome");
+            homeEvt.setParams({
+                "scope": "Object__c"});
+            homeEvt.fire();
+        }else {
+            helper.navigateTo(component,event,helper,recId);
+        }
+    },
+    
+    closeEventPopup : function(component, event, helper) {
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.openModal',false);
+        component.set("v.pickListValues", []);
+        var recId = component.get("v.recordId");
+        if(!recId){
+            var homeEvt = $A.get("e.force:navigateToObjectHome");
+            homeEvt.setParams({
+                "scope": "Object__c"});
+            homeEvt.fire();
+        }else {
+            helper.navigateTo(component,event,helper,recId);
+        }
+    }
+})
+
+Apex Class : 
+
+public with sharing class PickListController {
+@AuraEnabled        
+public static List<String> getPickListValuesIntoList(String objectType, String selectedField){
+    List<String> pickListValuesList = new List<String>();
+    Schema.SObjectType convertToObj = Schema.getGlobalDescribe().get(objectType);
+    Schema.DescribeSObjectResult res = convertToObj.getDescribe();
+    Schema.DescribeFieldResult fieldResult = res.fields.getMap().get(selectedField).getDescribe();
+    List<Schema.PicklistEntry> ple = fieldResult.getPicklistValues();
+    for( Schema.PicklistEntry pickListVal : ple){
+        pickListValuesList.add(pickListVal.getlabel());
+    }     
+    return pickListValuesList;
+}
+    @AuraEnabled
+public static list<String> getAllObject(){
+
+list<String> returnObjectMap = new list<String>();
+Map<String, Schema.SObjectType> objectMap = Schema.getGlobalDescribe();
+List<Schema.SObjectType> objectMapValues = objectMap.Values();
+System.debug('All Objects '+ objectMapValues);
+for(Schema.SObjectType objType : objectMapValues){
+String key = objType.getDescribe().getName();
+String value = objType.getDescribe().getLabel();
+returnObjectMap.add(key);
+}
+    returnObjectMap.sort();
+System.debug(returnObjectMap);
+if(returnObjectMap != null && returnObjectMap.size() > 0){
+return returnObjectMap;
+}else{
+return null;
+}
+}
+    //@AuraEnabled
+   /* public static void SaveRecords(String ObjectName, string pickListValues, string Description, Boolean Active){
+        Object__c Obj = new Object__c();
+        obj.Datastore__c = pickListValues;
+        obj.Active__c = Active;
+        obj.Description__c = Description;
+        obj.Name = ObjectName;
+        insert obj;
+        
+    }*/
+}
+
+== Picklist Comp ===
+
+<aura:component controller="PickListController" access="global">
+	<aura:attribute name="sObjectName" type="String" default="Object__c"/>
+<aura:attribute name="fieldName" type="String" default="Datastore__c" />
+<aura:attribute name="pickListValues" type="Object" />
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}" />
+</aura:component>
+
+
+=== Picklist Controller ===
+
+({
+    doInit : function(component) {
+        var action = component.get("c.getPickListValuesIntoList");
+        action.setParams({
+            objectType: component.get("v.sObjectName"),
+            selectedField: component.get("v.fieldName")
+        });
+        action.setCallback(this, function(response) {
+            var list = response.getReturnValue();
+            component.set("v.pickListValues", list);
+            console.log("pickListValues==>", list);
+        })
+        $A.enqueueAction(action);
+    }
+})
+
+
+============================================================================================================================================================
+
+Field : 
+
+Apex Class # 
+
+public class FieldController {
+    @AuraEnabled
+    public static List<String> getAllfields(String objectName){
+        List<String> allFields = new List<String>();
+        
+        Map<String, Schema.SObjectType> objectMap = Schema.getGlobalDescribe();
+        SObjectType objType = objectMap.get(objectName);
+        
+        // Map of fields with api name and Api name as value
+        Map<String,Schema.SObjectField> objTypeFields = objType.getDescribe().fields.getMap();
+        if(!objTypeFields.isEmpty()){
+            for (String fieldName: objTypeFields.keySet()) {
+                //getting labels of the fields
+                String fieldLabel = objTypeFields.get(fieldName).getDescribe().getLabel();
+                allFields.add(fieldLabel);
+            }
+        }
+        System.debug(allFields);
+        return allFields;
+    }
+    @AuraEnabled
+    public static List<String> pickList(String obj, String str) {           
+        List<String> regList = new List<String>();
+        Schema.DescribeFieldResult plistvalues = Schema.getGlobalDescribe().get(obj).getDescribe().fields.getMap().get(str).getDescribe();
+        for(PicklistEntry ent:plistvalues.getpicklistvalues())     {
+            regList.add(ent.getLabel());
+        }
+        return regList;
+    }
+    
+    @AuraEnabled
+    public static List<List<String>> getObjectPickList(Id recordId){
+        List<List<String>> MultipleList=new List<List<String>>();
+        List<String> objectPicklist =new List<String>();
+        List<String> objectDataStore =new List<String>();
+        Object__c objValue=[SELECT Id, Name, DataStore__c FROM Object__c WHERE Id=:recordId LIMIT 1];
+        objectDataStore.add(objValue.DataStore__c);
+        MultipleList.add(objectDataStore);
+        if(objValue.DataStore__c == 'Salesforce'){
+            
+            objectPicklist = getAllfields(objValue.Name);
+            
+        }
+        else{
+            objectPicklist=pickList('Field__c', 'Data_Type__c');
+        }
+        system.debug(objectPicklist);
+        MultipleList.add(objectPicklist);
+        system.debug(MultipleList);
+        return MultipleList;
+        
+    }
+    @AuraEnabled
+    public static list<Field__c> saveRecordlist(list<Field__c> FieldList, Id recordId){
+        upsert FieldList;
+        list<Field__c> ReloadedValues = [Select Id, Name, Description__c, Data_Type__c from Field__c where Object__c=:recordId];
+        return ReloadedValues;
+    }
+    
+    @AuraEnabled
+    public static List<Field__c> delFields(Field__c field, Id ObjId) {
+        
+        delete field;
+        
+        list<Field__c> ReloadedValues = [Select Id, Description__c, Name, Data_Type__c from Field__c where Object__c=:ObjId];
+        return ReloadedValues;
+    }
+    
+    @AuraEnabled
+    public static List<Field__c> getDisplayRecords(Id recordId){
+        
+        return [SELECT Id, Name, Description__c,Data_Type__c FROM Field__c WHERE Object__c=:recordId];  
+    }
+    
+}
+
+=== Component ===
+
+<aura:component controller="FieldController" implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,force:lightningQuickAction" access="global">
+    <aura:attribute name="openModal" type="boolean" default="false"/>
+    <aura:attribute name="editModal" type="boolean" default="false"/>
+    <aura:attribute name="Objectlist" type="object"/>
+    <aura:attribute name="allFields" type="Field__c[]"/>
+    <aura:attribute name="newField" type="list[]"/>
+    <aura:attribute name="Datastore" type="string"/>
+    <aura:attribute name="FieldsToDisplay" type="Field__c[]"/>
+    
+    <aura:handler name="init" value="{!this}" action="{!c.init}" />  
+    
+    <div class = "slds-border_left slds-border_right slds-border_top slds-border_bottom">
+        <lightning:card variant="Narrow" iconName='custom:custom62' class="slds-box slds-theme_shade" title="Object Fields">
+    <aura:set attribute="actions">
+            <lightning:button label="Add Fields" onclick="{!c.addfields}"/>
+            <lightning:button label="Edit Fields" onclick="{!c.editfields}"/>
+        </aura:set>
+    
+        <!-- Table Header -->
+        
+        <table class="slds-table slds-border_left slds-border_right slds-border_top slds-border_bottom"> 
+            <thead>
+                <tr class="slds-text-title_caps" style = "height : 40px;">
+                    <th scope="col" width="10%">
+                        <div class="slds-text-align_left"></div>
+                    </th>
+                    <th scope="col" width="20%">
+                        <div class="slds-text-align_left" title="field Name">FIELD NAME</div>
+                    </th>
+                    <th scope="col" width="40%">
+                        <div class="slds-text-align_left" title="description">DESCRIPTION</div>
+                    </th>
+                    <aura:if isTrue="{!not(v.Datastore == 'Salesforce')}">
+                        <th scope="col" width="20%">
+                            <div class="slds-text-align_left" title="datatype">DATA TYPE</div>
+                        </th></aura:if>
+                    <th scope="col" width="10%">
+                        <div class="slds-align_absolute-center" title="Delete">DELETE</div>
+                    </th>
+                </tr>
+            </thead>
+            
+            <tbody>
+                <aura:iteration items="{!v.FieldsToDisplay}" var="fld" indexVar="index">
+                    <tr class="slds-table slds-border_left slds-border_right slds-border_top slds-border_bottom">
+                        <td width="10%"><div class="slds-align_absolute-center">
+                            {!index + 1}</div>
+                        </td>
+                        <aura:if isTrue="{!v.Datastore == 'Salesforce'}">
+                            <td><div class="slds-text-align_left">{!fld.Name}</div></td>
+                            <td><div class="slds-text-align_left"><lightning:textarea name="fldDescription" disabled="true" type="text" class="slds-text-align_left" value="{!fld.Description__c}"/>
+                                </div></td>
+                            <td> <div class="slds-align_absolute-center">{!fld.Delete__c}
+                                <a onclick="{!c.deleteRecord}" data-record="{!index}">
+                                    <lightning:icon iconName="utility:delete" size="x-small" alternativeText="Delete" />
+                                    <span class="slds-assistive-text"></span>
+                                </a></div></td>
+                            <aura:set attribute="else">
+                                <td><div class="slds-text-align_left">{!fld.Name}</div></td>
+                                <td><div class="slds-text-align_left"><lightning:textarea name="fldDescription" disabled="true" type="text" value="{!fld.Description__c}"/>
+                                    </div></td>
+                                <td><div class="slds-text-align_left"> {!fld.Data_Type__c} </div></td>
+                                <td width="10%"> <div class="slds-align_absolute-center"> {!fld.Delete__c}
+                                    <a onclick="{!c.deleteRecord}" data-record="{!index}" >
+                                        <lightning:icon iconName="utility:delete" size="xx-small" class="slds-text-align_center" alternativeText="Delete"/>
+                                        <span class="slds-assistive-text">DELETE</span>
+                                    </a></div></td></aura:set>
+                        </aura:if>
+                    </tr>
+                </aura:iteration>
+                
+            </tbody>
+        </table>
+        
+        <aura:if isTrue="{!v.openModal}">
+            
+            <!-- Modal/Popup  starts here-->
+            
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1"
+                     class="slds-modal slds-fade-in-open">
+                <div aura:id="editDialog" role="dialog" tabindex="-1" aria-labelledby="header43" class="slds-modal slds-fade-in-open">
+                    
+                    <div class="slds-modal__container">
+                        <div class="slds-modal__header" >
+                            <aura:if isTrue = "{!v.editModal}">
+                                <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Edit Fields</h1>
+                                <aura:set attribute="else">
+                                    <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Add Fields</h1>
+                                </aura:set>
+                            </aura:if>
+                            
+                            <lightning:buttonIcon iconName="utility:close" onclick="{! c.closeEventPopup }"
+                                                  alternativeText="Close window"
+                                                  variant="bare-inverse"
+                                                  class="slds-modal__close"/></div>
+                        
+                        
+                        <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                            <table class = "slds-border_left slds-border_right slds-border_top slds-border_bottom"> 
+                                <thead>
+                                    <tr style = "height : 40px;" class="slds-text-title_caps slds-border_left slds-border_right slds-border_top slds-border_bottom">
+                                        
+                                        <th scope="col" width="10%">
+                                            <div class="slds-align_absolute-center"></div>
+                                        </th>
+                                        <th class="slds-is-sortable" scope="col" width="20%">
+                                            <div class="slds-align_absolute-center" title="field Name"><p class="required">*</p>FIELD NAME</div>
+                                        </th>
+                                        <th class="slds-is-sortable" scope="col" width="40%">
+                                            <div class="slds-align_absolute-center" title="description">DESCRIPTION</div>
+                                            
+                                        </th>
+                                        <aura:if isTrue="{!not(v.Datastore == 'Salesforce')}">
+                                            <th class="slds-is-sortable" scope="col" width="20%">
+                                                <div class="slds-align_absolute-center" title="datatype"><p class="required">*</p>DATA TYPE</div>
+                                            </th>
+                                        </aura:if>
+                                        <th class="slds-is-sortable" scope="col" width="10%">
+                                            <div class="slds-align_absolute-center" title="Delete">DELETE</div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="slds-hint-parent">
+                                        <th data-label="Field Name" scope="row">
+                                            <div class="slds-truncate"> </div>
+                                        </th></tr>
+                                </tbody>
+                                <tbody>      
+                                    <aura:iteration items="{!v.allFields}" var="obj" indexVar="index">
+                                        <tr class="slds-border_left slds-border_right slds-border_top slds-border_bottom slds-theme_default">
+                                            <td width="10%"> <div class="slds-align_absolute-center">
+                                                {!index + 1}
+                                                </div>  </td>
+                                            <aura:if isTrue="{!v.Datastore == 'Salesforce'}">
+                                                <td width="20%"><div class="slds-align_absolute-center">
+                                                    
+                                                    <lightning:select name="newField" aura:id="fieldId" value="{!obj.Name}" >
+                                                        <option value="">--None--</option>
+                                                        <aura:iteration items="{!v.newField}" var="field">
+                                                            <option text="{!field}" value="{!field}" selected="{!field.selected}"/>
+                                                        </aura:iteration>
+                                                    </lightning:select>
+                                                    </div>
+                                                </td>
+                                                <td width="40%"><div class="slds-align_absolute-center">
+                                                    <lightning:textarea name="objDescription" type="text" value="{!obj.Description__c}"/>
+                                                    </div>
+                                                </td>
+                                                <aura:set attribute="else">
+                                                    <td ><div class="slds-align_absolute-center">
+                                                        <lightning:input name="newField" aura:id="fieldId" value="{!obj.Name}"/>
+                                                        </div>
+                                                    </td>
+                                                    <td ><div class="slds-align_absolute-center">
+                                                        <lightning:textarea name="objDescription" type="text" value="{!obj.Description__c}"/>
+                                                        </div>
+                                                    </td>
+                                                    <td width="20%"><div class="slds-align_absolute-center">
+                                                        <lightning:select name="objDatatype" value="{!obj.Data_Type__c}">
+                                                            <option value="">--None--</option>
+                                                            <aura:iteration items="{!v.newField}" var="field">
+                                                                <option text="{!field}" value="{!field}" selected="{!field.selected}"/>
+                                                            </aura:iteration>
+                                                        </lightning:select>
+                                                        </div>
+                                                    </td>
+                                                </aura:set>	
+                                            </aura:if>
+                                            <td width = "10%"><div class="slds-align_absolute-center">
+                                                <a onclick="{!c.removeRecord}" data-record="{!index}">
+                                                    <lightning:icon iconName="utility:delete" size="xx-small" class="slds-text-align_center" alternativeText="Delete"/>
+                                                    <span class="slds-assistive-text">DELETE</span>
+                                                </a>
+                                                </div>
+                                            </td> 
+                                        </tr>
+                                    </aura:iteration>
+                                </tbody>
+                            </table>
+                            <br/>
+                            
+                            <lightning:button Name="Add Row" label="Add Row" variant="Neutral" onclick="{!c.addRow}"/>
+                        </div>
+                        
+                        <footer class="slds-modal__footer">
+                            <lightning:button variant="neutral" label="Cancel" title="Cancel" onclick="{! c.closeEventPopup }"/>
+                            <lightning:button variant="brand" label="Save" title="Save" onclick="{!c.NewSave}"/>
+                        </footer>
+                    </div></div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </aura:if>
+        </lightning:card></div>
+</aura:component>
+
+=== Helper  ====
+
+({
+    confirmlist : function(component, event) {
+        var isValid = true;
+        var allFields = component.get("v.allFields")
+        for(var i=0; i < allFields.length; i++){
+            if (allFields[i].Name == ''){
+                isValid = false;
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Error',
+                    message:'The required fields cannot left blank',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'error',
+                    mode: 'pester'});
+                toastEvent.fire();  
+            }
+        }
+        for(var i=0; i < allFields.length; i++){
+            if (allFields[i].Data_Type__c == ''){
+                isValid = false;
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Error',
+                    message:'The required fields cannot left blank',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'error',
+                    mode: 'pester'});
+                toastEvent.fire();  
+            }
+        }
+        return isValid;
+    },
+    
+    newSavefield : function(component, event, helper){
+        let button = event.getSource();
+    	button.set('v.disabled',true);
+        var action = component.get('c.saveRecordlist');
+        action.setParams({
+            FieldList : component.get("v.allFields"),
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state === "SUCCESS"){
+                component.set("v.allFields", []);
+                //alert('Records saved successfully');
+                component.set('v.openModal',false);
+                component.set("v.FieldsToDisplay", response.getReturnValue());
+            }else if (status === "INCOMPLETE") {
+                helper.showError(component, event, helper);
+                console.log("No response from server or client is offline.");
+            }else if (status === "ERROR") {
+                if (errors) {
+                    
+                    if (errors[0] && errors[0].message) {
+                        
+                        console.log("Error message: " + errors[0].message);
+                    }
+                } else {
+                    console.log("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    getPicklistValues : function(component, event, helper){
+        var action = component.get("c.getObjectPickList");
+        action.setParams({
+            recordId :component.get("v.recordId")
+        });
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            if (state === "SUCCESS" || state === "DRAFT") {
+                var result = response.getReturnValue();
+                
+                var objDatstore = result[0][0];
+                component.set("v.Datastore", objDatstore);
+                component.set("v.newField", result[1]);
+            }else if (status === "INCOMPLETE") {
+                console.log("No response from server or client is offline.");
+            }else if (status === "ERROR") {
+                if (errors) {
+                    if (errors[0] && errors[0].message) {
+                        console.log("Error message: " + errors[0].message);
+                    }
+                } else {
+                    console.log("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    displayfields : function(component, event, helper) {
+        var action = component.get('c.getDisplayRecords');
+        action.setParams({
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            if (state === "SUCCESS") {
+                component.set('v.FieldsToDisplay', response.getReturnValue());               
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    showSuccessToast : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": "Success!",
+            "type" : 'success',
+            "mode" : 'dismissible',
+            "duration" : 5000,
+            "message": "The record has been saved successfully."
+        });
+        toastEvent.fire();
+    }
+    
+})
+
+
+===   Controller  ====
+
+({
+    addfields : function(component, event, helper) {
+        component.set("v.openModal",true);
+        component.set("v.editModal",false);
+        var allFields = component.get("v.allFields");
+        
+        //if(allFields.length == 0){
+        allFields.push({
+            'sobjectType': 'Field__c',
+            'Name': '',
+            'Description__c': '',
+            'Object__c':component.get("v.recordId")
+        });
+        component.set("v.allFields", allFields);
+        //}
+    },
+    
+    editfields : function(component, event, helper){
+        component.set("v.openModal",true);
+        component.set("v.editModal",true);
+        var allFields = component.get("v.FieldsToDisplay");
+        component.set("v.allFields", allFields);
+      },
+    
+    closeEventPopup : function(component,event,helper){    
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.openModal',false);
+        component.set("v.allFields", []);
+    },
+    
+    addRow : function (component, event, helper){
+        var allFields = component.get("v.allFields");
+        allFields.push({
+            'sobjectType': 'Field__c',
+            'Name': '',
+            'Description__c': '',
+            'Object__c':component.get("v.recordId")
+        });
+        component.set("v.allFields", allFields);
+        
+    },
+    
+    init : function (component, event, helper){
+        helper.getPicklistValues(component, event, helper);
+        helper.displayfields(component, event, helper);
+    },
+    
+    NewSave: function(component, event, helper){
+        if(helper.confirmlist(component,event)){
+            helper.newSavefield(component, event, helper);
+            helper.showSuccessToast(component, event, helper);
+        }
+    },
+    
+    removeRecord: function(component, event, helper) {
+        var allFields = component.get("v.allFields");
+        var selectedItem = event.currentTarget;
+        var index = selectedItem.dataset.record;
+        allFields.splice(index, 1);
+        component.set("v.allFields", allFields);
+        var FieldsToDisplay = component.get("v.FieldsToDisplay");
+        var recordToDelete = FieldsToDisplay[index];    
+        var action = component.get("c.delFields");
+        action.setParams({
+            field: recordToDelete,
+            ObjId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state == 'SUCCESS'){
+                //FieldsToDisplay.splice(index, 1);
+                component.set("v.FieldsToDisplay", response.getReturnValue());
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Info',
+                    message: 'Record deleted successfully.',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'warning',
+                    mode: 'sticky'
+                });
+                toastEvent.fire();
+                console.log('Record deleted successfully');
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    deleteRecord : function(component, event, helper){
+        var FieldsToDisplay = component.get("v.FieldsToDisplay");
+        var selectedItem = event.currentTarget;
+        //console.log('selectedItem ==>', selectedItem);
+        var index = selectedItem.dataset.record;
+        //console.log('index ==>', index);
+        var recordToDelete = FieldsToDisplay[index];        
+        var action = component.get("c.delFields");
+        action.setParams({
+            field: recordToDelete,
+            ObjId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state == 'SUCCESS'){
+                //FieldsToDisplay.splice(index, 1);
+                component.set("v.FieldsToDisplay", response.getReturnValue());
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Info',
+                    message: 'Record deleted successfully.',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'warning',
+                    mode: 'sticky'
+                });
+                toastEvent.fire();
+                console.log('Record deleted successfully');
+            }
+        });
+        $A.enqueueAction(action);
+        
+    }
+    
+})
+
+=========================================================================================================================================================
+
+Mapping Contract
+
+Apex Class # 
+
+public with sharing class ContractController {
+    
+    @AuraEnabled
+    public static list<String> getAllObject(string objectRecord){
+        
+        list<String> returnObjectMap = new list<String>();
+        Map<String, Schema.SObjectType> objectMap = Schema.getGlobalDescribe();
+        List<Schema.SObjectType> objectMapValues = objectMap.Values();
+        System.debug('All Objects '+ objectMapValues);
+        for(Schema.SObjectType objType : objectMapValues){
+            String key = objType.getDescribe().getName();
+            String value = objType.getDescribe().getLabel();
+            returnObjectMap.add(key);
+        }
+        returnObjectMap.sort();
+        System.debug(returnObjectMap);
+        if(returnObjectMap != null && returnObjectMap.size() > 0){
+            return returnObjectMap;
+        }else{
+            return null;
+        }
+    }
+    @AuraEnabled
+    public static List<String> pickList(String obj, String str) {           
+        List<String> regList = new List<String>();
+        Schema.DescribeFieldResult plistvalues = Schema.getGlobalDescribe().get(obj).getDescribe().fields.getMap().get(str).getDescribe();
+        for(PicklistEntry ent:plistvalues.getpicklistvalues())     {
+            regList.add(ent.getLabel());
+        }
+        return regList;
+    }
+    
+    @AuraEnabled
+    public static List<List<sObject>> getContractRecords(Id recordId){
+        List<List<sObject>> MultipleList = new List<List<sObject>>();
+        List<sObject> getDatastore = new List<sObject>();
+        List<sObject> getMappingValue = new List<sObject>();
+        List<sObject> getNewDatastore = new List<sObject>();
+        getDatastore = [select id, Name from Object__c WHERE Datastore__c = 'Salesforce'];
+        getNewDatastore = [select id, Name from Object__c WHERE Datastore__c = 'SAP'];
+        getMappingValue=[SELECT Id, Source_Datastore__c, Target_Datastore__c FROM Mapping_Contracts__c WHERE Id=:recordId];
+        
+        multiplelist.add(getDatastore);
+        multiplelist.add(getMappingValue);
+        multiplelist.add(getNewDatastore);        
+        system.debug(MultipleList);
+        return MultipleList;
+    }
+    
+    @AuraEnabled
+    public static list<Contract_Rules__c> NewSaveMethod(Contract_Rules__c RecordList, Id recordId){
+        system.debug('inside'+RecordList);
+        Insert RecordList;
+        system.debug('inside');
+        list<Contract_Rules__c> NewValues = [Select Id, Name, Rule_Order__c, Source_Object__c, Target_Object__c, Source_Record_Type__c, External_Id__c,Mapping_Contracts__c from Contract_Rules__c where Mapping_Contracts__c=:recordId order by Rule_Order__c];
+    	return NewValues;
+    }
+    @AuraEnabled
+    public static List<Contract_Rules__c> getDisplayfields(Id recordId){
+        return [Select Id, Name, Rule_Order__c, Source_Object__c, Target_Object__c, Source_Record_Type__c, External_Id__c from Contract_Rules__c where Mapping_Contracts__c=:recordId order by Rule_Order__c];  
+    }
+    @AuraEnabled
+    public static List<Contract_Rules__c> delContract(Contract_Rules__c contractRec, Id recordId){
+        delete contractRec;
+        
+        list<Contract_Rules__c> delValues = [Select Id, Name, Rule_Order__c, Source_Object__c, Target_Object__c, Source_Record_Type__c, External_Id__c from Contract_Rules__c where Rule_Order__c >: contractRec.Rule_Order__c];
+        
+        if(delValues.size() > 0){
+            for(integer i=0; i < delValues.size(); i++){
+                delValues[i].Rule_Order__c = delValues[i].Rule_Order__c - 1;
+            }
+            update delValues;
+        }
+            
+            list<Contract_Rules__c> NewValues = [Select Id, Name, Rule_Order__c, Source_Object__c, Target_Object__c, Source_Record_Type__c, External_Id__c from Contract_Rules__c where Mapping_Contracts__c=:recordId order by Rule_Order__c];
+        return NewValues;
+        
+    } 
+}
+
+
+===  Mapping Comp  ====
+
+<aura:component controller="ContractController" implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId,force:lightningQuickAction" access="global">
+    <aura:attribute name="mycolumns" type="List"/>
+    <aura:attribute name="salesforce" type="List" />
+    <aura:attribute name="ruleorder" type="integer" />
+    <aura:attribute name="datastore" type="List" />
+    <aura:attribute name="dataList" type="Contract_Rules__c[]"/>
+    <aura:attribute name="newModal" type="boolean" default = "false"/>
+    <aura:attribute name="recordId" type="id"/>
+    <aura:attribute name="contractRecord" type="Contract_Rules__c" default="{'sObject Name' : 'Contract_Rules__c',
+                                                                            'Name' : '',
+                                                                            'External_Id__c' : '',
+                                                                            'Rule_Order__c' : '',
+                                                                            'Source_Object__c' : '',
+                                                                            'Target_Object__c' : '',
+                                                                            'Source_Record_Type__c' : '',
+                                                                            'Mapping_Contracts__c' : ''}"/>
+    
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    
+    <lightning:card variant="Narrow" iconName='custom:custom99' title="Contract Rules">
+        <aura:set attribute="actions">
+            <lightning:button label="New" variant="Neutral" onclick="{!c.newbutton}"/>
+        </aura:set>
+    </lightning:card>
+    <div>    
+        <lightning:datatable
+                             columns="{! v.mycolumns }"
+                             data="{! v.dataList }"
+                             keyField="id"
+                             hideCheckboxColumn="true"
+                             onrowaction = "{!c.handleRowAction}"/>
+        
+    </div>
+    <!-- Popup Started-->
+    
+    <aura:if isTrue="{!v.newModal}">
+        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open"/>
+        
+        <div aura:id="editDialog" role="dialog" tabindex="-1" aria-labelledby="header43" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <div class="slds-modal__header">
+                    <lightning:buttonIcon iconName="utility:close" onclick="{! c.closeEventPopup }"
+                                          alternativeText="Close window"
+                                          variant="bare-inverse"
+                                          class="slds-modal__close"/>
+                    <h2 class="slds-text-heading--medium">New Contract Rule</h2></div>
+                <div class="slds-box slds-size_1-of-1 slds-box_xx-small slds-theme_shade slds-text-align_left">
+                    <span>Contract Rule Information</span>
+                </div>
+                
+                <div class="slds-modal__content slds-p-around--large slds-grid slds-wrap ">
+                    <lightning:input name="rule name" label="Contract Rule Name" type="text" required="true" aura:id="rulename" value="{!v.contractRecord.Name}" class="slds-size--1-of-2 slds-p-horizontal_x-small"/>
+                    <lightning:input name="rule order" label="Rule Order" type="number" disabled="true" aura:id="ruleorder" value="{!v.ruleorder}" class="slds-size--1-of-2 slds-p-horizontal_x-small"/>
+                    <lightning:select  aura:id="source" name="Source Object" required="true" value="{!v.contractRecord.Source_Object__c}" label="Source Object" class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                        <option value="">--None--</option>
+                        <aura:iteration items="{!v.salesforce}" var="List">
+                            <option value="{!List}">{!List}</option>
+                        </aura:iteration>
+                    </lightning:select>
+                    <lightning:select  aura:id="target" name="target" required="true" value="{!v.contractRecord.Target_Object__c}" label="Target Object" class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                        <option value="">--None--</option>
+                        <aura:iteration items="{!v.datastore}" var="List">
+                            <option value="{!List}">{!List}</option>
+                        </aura:iteration>
+                    </lightning:select>
+                    <lightning:select  aura:id="recordtype" name="recordtype" onchange="{!c.handleChange}" value="{!v.contractRecord.Source_Record_Type__c}" label="Source Record Type" class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                        <option value="">--None--</option>
+                        
+                    </lightning:select>
+                    <lightning:select  aura:id="externalId" name="externalId" value="{!v.contractRecord.External_Id__c}" label="ExternalId" class="slds-size--1-of-2 slds-p-horizontal_x-small">
+                        <option value="">--None--</option>
+                        
+                    </lightning:select>
+                </div> 
+                <div class="slds-modal__footer">                
+                    <lightning:button variant="neutral" label="Cancel" onclick="{!c.cancelButton}"/>
+                    <lightning:button variant="brand" label="Save" onclick="{!c.saveRecord}" />
+                </div>
+            </div>
+        </div>
+        
+    </aura:if>
+</aura:component>
+
+=== Mapping Helper ===
+
+({
+    navigateTo: function(component,recId) {
+        var navEvt = $A.get("e.force:navigateToSObject");
+        navEvt.setParams({
+            "recordId": recId
+        });
+        
+        navEvt.fire();
+    },
+    
+    fetchDetailsHelper : function(component, event, helper) {
+        var actions = [{label: 'Delete', name: 'delete'}];
+        component.set('v.mycolumns', [            
+            { label: 'Contract Rule Name', fieldName: 'linkName', type: 'url',
+             typeAttributes: { label: { fieldName: 'Name'}, tooltip: { fieldName: 'Name'}}},
+            {label: 'Rule Order', fieldName: 'Rule_Order__c', type: 'number'},
+            {label: 'Source Object', fieldName: 'Source_Object__c', type: 'text'},
+            {label: 'Target Object', fieldName: 'Target_Object__c', type: 'text'},
+            {label: 'Record Type', fieldName: 'Source_Record_Type__c', type: 'text'},
+            {type: 'action', typeAttributes: { rowActions: actions } }
+        ]);
+        var action = component.get("c.getDisplayfields");
+        action.setParams({
+            recordId :component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if (state === "SUCCESS") {
+                var results= response.getReturnValue();
+                let dataset = [];
+                for(var i=0; i<results.length; i++){
+                    var attr = results[i];
+                    attr.linkName = '/' + attr.Id;
+                    dataset.push(attr);
+                }
+                component.set("v.dataList",dataset);
+                component.set("v.ruleorder",results.length+1);
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    getPicklistValues : function(component, event, helper){
+        var action = component.get("c.getContractRecords");
+        action.setParams({
+            recordId :component.get("v.recordId")
+        });
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            console.log(state);
+            if (state === "SUCCESS" || state === "DRAFT") {
+                var contract = response.getReturnValue()[0];
+                var contractRule = response.getReturnValue()[2];
+                var mappingRule = response.getReturnValue()[1];
+                console.log(mappingRule);
+                var newOne = [];
+                var oldOne = [];
+                for(var i=0; i<contract.length; i++){
+                    newOne.push(contract[i].Name);
+                }
+                for(var i=0; i<contractRule.length; i++){
+                    oldOne.push(contractRule[i].Name);
+                }
+                if(mappingRule[0].Source_Datastore__c == "Salesforce"){
+                    component.set("v.salesforce", newOne);
+                    component.set("v.datastore", oldOne);    
+                }else{
+                    component.set("v.salesforce", oldOne);
+                    component.set("v.datastore", newOne);
+                }
+            }
+            else if (status === "INCOMPLETE") {
+                console.log("No response from server or client is offline.");
+            }else if (status === "ERROR") {
+                if (errors) {
+                    if (errors[0] && errors[0].message) {
+                        console.log("Error message: " + errors[0].message);
+                    }
+                } else {
+                    console.log("Unknown error");
+                }
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    preSaveValidation : function(component, event, helper) {
+        var isValid = true;
+        var newRecord = JSON.parse(JSON.stringify(component.get("v.contractRecord")));
+        if (newRecord.Source_Object__c == ''){
+            var toastEvent = $A.get("e.force:showToast");
+            isValid = false;
+            toastEvent.setParams({
+                title : 'Error',
+                message:'The required fields cannot left blank',
+                duration:' 5000',
+                key: 'info_alt',
+                type: 'error',
+                mode: 'pester'});
+            toastEvent.fire();
+        }
+        else if(newRecord.Target_Object__c == ''){
+            var toastEvent = $A.get("e.force:showToast");
+            isValid = false;
+            toastEvent.setParams({
+                title : 'Error',
+                message:'The required fields cannot left blank',
+                duration:' 5000',
+                key: 'info_alt',
+                type: 'error',
+                mode: 'pester'});
+            toastEvent.fire();
+        } else if(newRecord.Name == ''){
+            var toastEvent = $A.get("e.force:showToast");
+            isValid = false;
+            toastEvent.setParams({
+                title : 'Error',
+                message:'The required fields cannot left blank',
+                duration:' 5000',
+                key: 'info_alt',
+                type: 'error',
+                mode: 'pester'});
+            toastEvent.fire();
+        }else{
+            console.log('No Error');
+        }
+        return isValid;
+    },
+    
+    newSaveRecord : function(component, event, helper){
+        var contRule = JSON.parse(JSON.stringify(component.get("v.contractRecord")));
+        contRule.Rule_Order__c = component.get("v.ruleorder");
+        contRule.Mapping_Contracts__c = component.get("v.recordId");
+        console.log('contRule', contRule);
+        var action = component.get('c.NewSaveMethod');
+        action.setParams({
+            RecordList : contRule,
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            console.log(state);
+            if(state === "SUCCESS"){
+                component.set('v.newModal',false);
+                var contRule = response.getReturnValue();
+                helper.showSuccessToast(component, event, helper);
+                let dataset = [];
+                for(var i=0; i<contRule.length; i++){
+                    var attr = contRule[i];
+                    attr.linkName = '/' + attr.Id;
+                    dataset.push(attr);
+                }
+                component.set("v.dataList",dataset);
+                component.set("v.ruleorder",contRule.length+1);
+                var empt = {'sObject Name' : 'Contract_Rules__c',
+                            'Name' : '',
+                            'External_Id__c' : '',
+                            'Rule_Order__c' : '',
+                            'Source_Object__c' : '',
+                            'Target_Object__c' : '',
+                            'Source_Record_Type__c' : '',
+                            'Mapping_Contracts__c' : ''};
+                component.set("v.contractRecord", empt);
+            }
+            
+            else{
+                console.log("Unknown error");
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    
+    deleteRecord : function(component, event, helper) {
+        var contractRec = event.getParam('row');  
+        console.log('contractRec', contractRec);
+        var action = component.get("c.delContract");
+        action.setParams({
+            contractRec : contractRec,
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response) {
+            var state = response.getState();
+            component.set("v.newModal", false);            
+            if (state === "SUCCESS" ) {
+                var delRecs = response.getReturnValue();
+                let dataset = [];
+                for(var i=0; i<delRecs.length; i++){
+                    var attr = delRecs[i];
+                    attr.linkName = '/' + attr.Id;
+                    dataset.push(attr);
+                }
+                component.set("v.dataList",delRecs);
+                component.set("v.ruleorder",delRecs.length+1);
+                this.showToast("Success!","success","The record has been delete successfully.");
+            }
+            else{
+                this.showToast("ERROR","error",JSON.stringify(response.getError())); 
+            }
+            
+        });
+        $A.enqueueAction(action);
+    },
+    
+    showSuccessToast : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": "Success!",
+            "type" : 'success',
+            "mode" : 'dismissible',
+            "duration" : 5000,
+            "message": "The record has been saved successfully."
+        });
+        toastEvent.fire();
+    }
+    
+})
+
+===  Mapping Controller ===
+
+({
+    newbutton : function(component, event, helper) {
+        component.set("v.newModal",true);
+    },
+       
+    closeEventPopup : function(component,event,helper){    
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.newModal',false);
+        //component.set("v.allFields", []);
+    },
+    
+    cancelButton : function(component, event, helper) {
+        component.set('v.newModal',false);
+    },
+    
+    doInit : function(component, event, helper){
+        helper.getPicklistValues(component, event, helper);
+        helper.fetchDetailsHelper(component, event, helper);  
+    },
+    
+    saveRecord : function(component, event, helper){
+        if(helper.preSaveValidation(component, event, helper)){
+            helper.newSaveRecord(component, event, helper);
+        }
+    },
+    
+    handleRowAction : function(component, event, helper){
+        var action = event.getParam('action');
+        switch (action.name) {
+            case 'delete':
+                helper.deleteRecord(component, event, helper);
+                break;
+        }
+    }
+})
+
+==========================================================================================================================================================
+
+Transformation Rule
+
+Apex Class # 
+
+public with sharing class TransformationController {
+    
+    @AuraEnabled
+    public static List<String> mappingPickList(String obj, String str) {           
+        List<String> regList = new List<String>();
+        Schema.DescribeFieldResult plistvalues = Schema.getGlobalDescribe().get(obj).getDescribe().fields.getMap().get(str).getDescribe();
+        for(PicklistEntry ent:plistvalues.getpicklistvalues())     {
+            regList.add(ent.getLabel());
+        }
+        return regList;
+    }
+    
+    
+    @AuraEnabled
+    public static List<List<String>> getTransformationType(Id recordId){
+        List<List<String>> MultipleListView=new List<List<String>>();
+        List<String> TransformTypes = new List<String>();
+        TransformTypes= mappingPickList('Mapping_Rules__c','Transformation_Type__c');
+        
+        Contract_Rules__c conRule=[SELECT Id, Name, Rule_Order__c, Source_Object__c, Target_Object__c, Source_Record_Type__c, External_Id__c, Mapping_Contracts__c FROM Contract_Rules__c WHERE Id=:recordId LIMIT 1];
+        
+        String sourceObj=[SELECT Id, Name, DataStore__c, Description__c, Active__c FROM Object__c WHERE Name =: conRule.Source_Object__c LIMIT 1].Id;
+        String targetObj=[SELECT Id, Name, DataStore__c, Description__c, Active__c FROM Object__c WHERE Name =: conRule.Target_Object__c LIMIT 1].Id;
+        List<Field__c> sourceFieldRec=[SELECT Id, Name, Object__c, Description__c, Data_Type__c FROM Field__c WHERE Object__c=:sourceObj];
+        List<Field__c> targetFieldRec=[SELECT Id, Name, Object__c, Description__c, Data_Type__c FROM Field__c WHERE Object__c=:targetObj];
+        List<String> SourceField = new List<String>();
+        List<String> TargetField = new List<String>();
+        
+        for (Field__c srecord:sourceFieldRec){
+            SourceField.add(srecord.Name);
+        }
+        for (Field__c targetrecord:targetFieldRec){
+            TargetField.add(targetrecord.Name);
+        }
+        
+        MultipleListView.add(TransformTypes);
+        MultipleListView.add(TargetField);
+        MultipleListView.add(SourceField);
+        system.debug(TransformTypes);
+        system.debug(TargetField);
+        system.debug(SourceField);
+        
+        return MultipleListView;
+    }
+    
+   @AuraEnabled
+    public static wrapper wrapmethod(Id recordId){
+    List<Contract_Rules__c> contractRec = [SELECT Id, Target_Object__c, Source_Object__c, Mapping_Contracts__c FROM Contract_Rules__c WHERE Id =: recordId LIMIT 1];
+    List<Mapping_Contracts__c>  ObjConRec = [SELECT Id, Target_Datastore__c, Source_Datastore__c FROM Mapping_Contracts__c WHERE Id =: contractRec[0].Mapping_Contracts__c LIMIT 1];
+        List<String>  ObjAllFields =new List<String>();
+        wrapper wrap = new wrapper();
+        wrap.conRec = new List<Contract_Rules__c>(contractRec);
+        wrap.mapRec = new List<Mapping_Contracts__c>(ObjConRec);           
+        system.debug(wrap.conRec[0].Source_Object__c);
+        if(wrap.mapRec[0].Source_Datastore__c == 'Salesforce'){
+            ObjAllFields = getAllfields(wrap.conRec[0].Source_Object__c);
+                system.debug(ObjAllFields);
+		}
+        wrap.ObjFieldRec = new List<String>(ObjAllFields);
+        system.debug(wrap);
+        return wrap;
+       }
+   public class wrapper{
+        @AuraEnabled
+        public List<Contract_Rules__c> conRec;
+        @AuraEnabled
+        public List<Mapping_Contracts__c> mapRec;
+       @AuraEnabled
+        public List<String> ObjFieldRec;
+
+	}
+    
+    @AuraEnabled
+    public static list<Mapping_Rules__c> transRuleList(Id recordId){
+        
+        list<Mapping_Rules__c> ReloadedValues = [Select Id, Transformation_Value__c, Target_Field__c, Mandatory__c, Transformation_Type__c,Contract_Rules__c, Mapping_Split_Rec__c from Mapping_Rules__c where Contract_Rules__c=:recordId];
+        return ReloadedValues;
+    }
+    
+    @AuraEnabled
+    public static list<Mapping_Rules__c> saveRuleList(list<Mapping_Rules__c> RuleList, Id recordId){
+        upsert RuleList;
+        list<Mapping_Rules__c> ReloadedValues = [Select Id, Transformation_Value__c, Target_Field__c, Mandatory__c, Transformation_Type__c,Contract_Rules__c, Mapping_Split_Rec__c from Mapping_Rules__c where Contract_Rules__c=:recordId];
+        return ReloadedValues;
+    }
+    @AuraEnabled
+    public static List<Mapping_Rules__c> deleteRule(Mapping_Rules__c mappingRule, Id RuleId) {
+        
+        delete mappingRule;
+        
+        list<Mapping_Rules__c> ReloadedValues = [Select Id, Transformation_Value__c, Target_Field__c, Mandatory__c, Transformation_Type__c,Contract_Rules__c, Mapping_Split_Rec__c from Mapping_Rules__c where Contract_Rules__c=:RuleId];
+        return ReloadedValues;
+    }
+    @AuraEnabled
+    public static List<Mapping_Rules__c> getSavedRecords(Id recordId){
+        
+        return [SELECT Id, Name, Transformation_Value__c FROM Mapping_Rules__c WHERE Contract_Rules__c=:recordId];  
+    }
+    
+    @AuraEnabled
+    public static List<String> getAllfields(String objectName){
+        List<String> allFields = new List<String>();
+        
+        Map<String, Schema.SObjectType> objectMap = Schema.getGlobalDescribe();
+        SObjectType objType = objectMap.get(objectName);
+        
+        // Map of fields with api name and Api name as value
+        Map<String,Schema.SObjectField> objTypeFields = objType.getDescribe().fields.getMap();
+        if(!objTypeFields.isEmpty()){
+            for (String fieldName: objTypeFields.keySet()) {
+                //getting labels of the fields
+                String fieldLabel = objTypeFields.get(fieldName).getDescribe().getLabel();
+                if(fieldName.contains('Id')){
+                    //allFields.add(fieldName);
+                }
+                allFields.add(fieldLabel);
+            }
+        }
+        System.debug(allFields);
+        return allFields;
+    }
+    
+    @AuraEnabled
+    public static List<List<sObject>> getMappingContractRule(Id RecId) {
+        
+        List<Contract_Rules__c> contractRule = [SELECT Id, Source_Object__c, Target_Object__c, Mapping_Contracts__c FROM Contract_Rules__c WHERE Id =: RecId LIMIT 1];
+        List<Mapping_Contracts__c> mappingContract = [SELECT Id, Target_Datastore__c, Source_Datastore__c FROM Mapping_Contracts__c WHERE Id =: contractRule[0].Mapping_Contracts__c LIMIT 1];
+        List<List<sObject>> multilist = new List<List<sObject>>();
+        multilist.add(contractRule);
+        multilist.add(mappingContract);
+        return multilist;   
+    }
+    
+    @AuraEnabled
+    public static picklistReturnValue fetchLookupFields(String sourceObjName){
+        Map<String, Schema.SObjectType> schemaMap = Schema.getGlobalDescribe();
+        Schema.SObjectType leadSchema = schemaMap.get(sourceObjName);
+        Map<String, Schema.SObjectField> fieldMap = leadSchema.getDescribe().fields.getMap();
+        List<picklistValue> lookupFieldsList = new List<picklistValue>();
+        Map<String, String> lookupReference = new Map<String, String>();
+        for (String fieldName: fieldMap.keySet()) {
+            String fieldLabel = fieldMap.get(fieldName).getDescribe().getLabel();
+            Schema.DisplayType fielddataType = fieldMap.get(fieldName).getDescribe().getType();
+            if(fielddataType == Schema.DisplayType.Reference) {
+                lookupFieldsList.add(new picklistValue(fieldLabel + ' >', fieldName));
+                lookupReference.put(fieldName, String.valueOf(fieldMap.get(fieldName).getDescribe().getReferenceTo()[0]));
+            }
+        }
+        return new picklistReturnValue(lookupFieldsList, lookupReference);   
+    }
+    
+    public class picklistValue {
+        
+        @AuraEnabled public String label {get; set;}
+        @AuraEnabled public String value {get; set;}
+        
+        public picklistValue(String label, String value) {
+            this.label = label;
+            this.value = value;
+        }
+    }
+    public class picklistReturnValue {
+        
+        @AuraEnabled public List<picklistValue> picklistValues {get; set;}
+        @AuraEnabled public Map<String, String> picklistReference {get; set;}
+        
+        public picklistReturnValue(List<picklistValue> picklistValues, Map<String, String> picklistReference) {
+            this.picklistValues = picklistValues;
+            this.picklistReference = picklistReference;
+        }
+    }
+    
+    @AuraEnabled
+    public static picklistReturnValue fetchAllLookupFields(String sourceObjName, Integer sizeOfBreadcrumbs){
+        Map<String, Schema.SObjectType> schemaMap = Schema.getGlobalDescribe();
+        Schema.SObjectType leadSchema = schemaMap.get(sourceObjName);
+        Map<String, Schema.SObjectField> fieldMap = leadSchema.getDescribe().fields.getMap();
+        List<picklistValue> lookupFieldsList = new List<picklistValue>();
+        Map<String, String> lookupReference = new Map<String, String>();
+        for (String fieldName: fieldMap.keySet()) {
+            String fieldLabel = fieldMap.get(fieldName).getDescribe().getLabel();
+            Schema.DisplayType fielddataType = fieldMap.get(fieldName).getDescribe().getType();
+            if(fielddataType == Schema.DisplayType.Reference) {
+                lookupFieldsList.add(new picklistValue(fieldLabel + ' >', fieldName));
+                lookupReference.put(fieldName, String.valueOf(fieldMap.get(fieldName).getDescribe().getReferenceTo()[0]));
+            }
+            else{
+                lookupFieldsList.add(new picklistValue(fieldLabel, fieldName));
+            }
+        }
+        return new picklistReturnValue(lookupFieldsList, lookupReference);
+    }
+}
+
+===  Trans Comp  ===
+
+<aura:component controller = "TransformationController" implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId" access="global" >
+    
+    <aura:attribute name="FieldsToDisplay" type="Mapping_Rules__c[]"/>
+    <aura:attribute name="TransformationType" type="list"/>
+    <aura:attribute name="Transformation" type="string"/>
+    <aura:attribute name="indexVariable" type="string"/>
+    <aura:attribute name="waffle" type="boolean" default="false"/>
+    <aura:attribute name="openModal" type="boolean" default="false"/>
+    <aura:attribute name="AddModal" type="boolean" default="false"/>
+    <aura:attribute name="hidden" type="boolean" default="false"/>
+    <aura:attribute name="salesforce" type="list" />
+    <aura:attribute name="ifElseDefault" type="Mapping_Rules__c[]" />
+    <aura:attribute name="target" type="list"/>
+    <aura:attribute name="source" type="list"/>
+    <aura:attribute name="Source_Object__c" type="list" />
+    <aura:attribute name="objSource" type="string"/>
+    <aura:attribute name="objMapRule" type="String"/>
+    
+    <aura:attribute name="mappCont" type="Object"/>
+    <aura:attribute name="contRule" type="Object"/>
+    <aura:attribute name="objFieldRec" type="list"/>
+    <aura:attribute name="objBreadCrumb" type="string"/>
+    <aura:attribute name="recordId" type="Id"/>
+    
+    <aura:attribute name="radioValue" type="String"/>    
+    <aura:attribute type="boolean" name="showDetail" default="false" />
+    <aura:attribute name="options" type="list" default="[
+                                                        {'label': 'ALL', 'value': 'Condition-1'},
+                                                        {'label': 'ANY', 'value': 'Condition-1, Condition-2'},
+                                                        {'label': 'CUSTOM', 'value': 'Condition-1, Condition-2'}]"/>
+    
+    
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <!--aura:handler event="force:refreshView" action="{!c.doInit}" /-->
+    
+    <div class = "slds-box slds-theme_shade">
+        
+        <lightning:card variant="Narrow" iconName='custom:custom99' class="slds-theme_shade" title="Mapping Rules">
+            
+            <!-- Data Table -->
+            
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer"> 
+                <thead >
+                    <tr class="slds-text-title_caps slds-border_left slds-border_right slds-border_top slds-border_bottom" style = "height : 50px;">
+                        <th scope="col" width="5%">
+                            
+                        </th>
+                        <th scope="col" width="20%">
+                            <div title="type" class="slds-align_absolute-center"><p class="required">*</p>TRANSFORMATION TYPE</div>
+                        </th>
+                        <th scope="col" width="25%">
+                            <div title="value" class="slds-align_absolute-center">
+                                <p class="required">*</p>TRANSFORMATION VALUE
+                            </div>
+                        </th>
+                        <th scope="col" width="5%">
+                            <div class="slds-align_absolute-center">
+                            </div>
+                        </th>
+                        <th scope="col" width="25%">
+                            <div title="field" class="slds-align_absolute-center"><p class="required">*</p>TARGET FIELD</div>
+                        </th> 
+                        <th scope="col" width="10%">
+                            <div title="mandatory" class="slds-align_absolute-center">MANDATORY</div>
+                        </th>
+                        <th scope="col" width="10%">
+                            <div title="Delete" class="slds-align_absolute-center">DELETE</div>
+                        </th>
+                    </tr>
+                </thead>
+                
+                <tbody>
+                    <aura:iteration items="{!v.FieldsToDisplay}" var="trans" indexVar="index">
+                        <tr class="slds-border_bottom">
+                            <td >
+                                <div class="slds-align_absolute-center slds-p-bottom_xx-small">
+                                    {!index + 1}
+                                </div>
+                            </td>
+                            <c:TransformationRulesChild trans="{!trans}" contRule="{!v.contRule}" mappCont="{!v.mappCont}" TransformationType="{!v.TransformationType}" recordId="{!v.recordId}" objBreadCrumb="{!v.objBreadCrumb}" hidden="{!v.hidden}" index="{!index}" target="{!v.target}" source="{!v.source}" objFieldRec = "{!v.objFieldRec}" objSource = "{!v.objSource}" objMapRule = "{!v.objMapRule}"/> 
+                            <td >
+                                <a onclick="{!c.deleteRecord}" data-record="{!index}">
+                                    <lightning:icon iconName="utility:delete" class="slds-align_absolute-center" size="x-small" alternativeText="Delete" />
+                                    <span class="slds-assistive-text">
+                                        
+                                    </span>
+                                </a>
+                            </td>
+                        </tr>
+                    </aura:iteration>
+                </tbody>
+            </table>
+        </lightning:card>
+        
+        <div class="slds-border_left slds-border_right slds-border_top slds-border_bottom" style="height:4rem"><br/>
+            <lightning:button Name="Add Row" label="Add Row" variant="Neutral" onclick="{!c.addRow}"/>
+        </div>
+    </div>
+    <aura:if isTrue = "{!v.hidden}">
+    <footer class="slds-modal__footer">
+        <div class="slds-align_absolute-center"><br/>
+            <lightning:button variant="neutral" label="Cancel" title="Cancel" onclick="{! c.cancel }"/>
+            <lightning:button variant="brand" label="Save" title="Save" onclick="{!c.NewSave}"/>
+        </div>
+    </footer>
+    </aura:if>
+    
+</aura:component>
+
+===  Trans Helper === 
+
+({
+    dataTableHelper : function(component, event, helper) {
+        var allFields = component.get("v.FieldsToDisplay");
+        allFields.push({
+            'sobjectType': 'Mapping_Rules__c',
+            'Name' : '',
+            'Transformation_Type__c': '',
+            'Transformation_Value__c': '',
+            'Target_Field__c':'',
+            'Mandatory__c' : '',
+            'Contract_Rules__c' : component.get("v.recordId")
+        });
+        component.set("v.FieldsToDisplay", allFields);
+    },
+    
+    mappingRulePickList : function(component, event, helper) {
+        var action = component.get("c.getTransformationType");
+        action.setParams({
+            recordId :component.get("v.recordId")
+        });       
+        action.setCallback(this, function(response){
+            var state = response.getState();            
+            if(state=="SUCCESS"){
+                var tType = response.getReturnValue();
+                console.log('type-->', tType);
+                component.set("v.TransformationType", tType[0]);
+                component.set("v.target", tType[1]);
+                component.set("v.source", tType[2]);
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+        displaySavedFields : function(component, event, helper){
+        	console.log('objRef');
+        var action = component.get("c.wrapmethod");
+        action.setParams({
+             recordId :component.get("v.recordId")
+        });
+       action.setCallback(this, function(response){
+            var state = response.getState();
+           console.log('comeonstate', state);
+           if(state === "SUCCESS"){
+                var result = response.getReturnValue();
+               console.log('result',result);
+               component.set('v.objBreadCrumb', result.mapRec[0].Source_Datastore__c);
+               component.set('v.mappCont', JSON.parse(JSON.stringify(result.mapRec[0])));
+               component.set('v.contRule', JSON.parse(JSON.stringify(result.conRec[0])));
+               console.log('map',JSON.parse(JSON.stringify(component.get('v.mappCont'))));
+               component.set('v.objFieldRec', result.ObjFieldRec);
+           }
+       });
+            
+      $A.enqueueAction(action);
+    },
+    
+    validation : function(component, event, helper) {
+        var isValid = true;
+        var rule = JSON.parse(JSON.stringify(component.get("v.FieldsToDisplay")));
+        for(var i=0; i < rule.length; i++){
+            if (rule[i].Transformation_Type__c == ''){
+                isValid = false;
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Error',
+                    message:'The required fields cannot left blank',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'error',
+                    mode: 'pester'});
+                toastEvent.fire();  
+            }
+            else if (rule[i].Transformation_Value__c == ''){
+                isValid = false;
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Error',
+                    message:'The required fields cannot left blank',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'error',
+                    mode: 'pester'});
+                toastEvent.fire();  
+            }
+                else if (rule[i].Target_Field__c == ''){
+                    isValid = false;
+                    var toastEvent = $A.get("e.force:showToast");
+                    toastEvent.setParams({
+                        title : 'Error',
+                        message:'The required fields cannot left blank',
+                        duration:' 5000',
+                        key: 'info_alt',
+                        type: 'error',
+                        mode: 'pester'});
+                    toastEvent.fire();  
+                }
+                    else {
+                        console.log('No Issue');
+                    }
+        }
+        return isValid;
+    },
+    
+    
+    
+    newSaveRule : function(component, event, helper){
+        var action = component.get("c.saveRuleList");
+        action.setParams({
+            RuleList : component.get("v.FieldsToDisplay"),
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state === "SUCCESS"){
+                component.set('v.openModal',false);
+                //component.set('v.AddModal',false);
+                component.set("v.FieldsToDisplay", response.getReturnValue());
+                helper.showSuccessToast(component, event, helper);
+                
+            }else {
+                console.log("Unknown error");
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    ifElseAdd : function(component, event, helper) {
+        /*var addRow = {};
+        addRow.FIELD='';
+        addRow.OPERATOR='';
+        addRow.TYPE = '';
+        addRow.VALUE='';
+        component.set("v.ifElse", addRow);*/
+        var ifElseVal = component.get("v.ifElseDefault");
+        ifElseVal.push({
+         
+        });
+        component.set("v.ifElseDefault", ifElseVal);
+        
+    },
+    
+    textAreaAdd : function(component, event, helper) {
+        var textAreaValue = component.get("v.textAreaDefault");
+        textAreaValue.push({
+            
+        });
+        component.set("v.textAreaDefault", textAreaValue);
+    },
+    
+    deleteTable : function(component, event, helper, selectedRow){
+        if(selectedRow != '' && selectedRow != null && selectedRow != undefined){
+       	var action = component.get("c.deleteRule");
+        action.setParams({
+            mappingRule : selectedRow,
+            RuleId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state === "SUCCESS"){
+                component.set("v.FieldsToDisplay", response.getReturnValue());
+                var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    title : 'Info',
+                    message: 'Record deleted successfully.',
+                    duration:' 5000',
+                    key: 'info_alt',
+                    type: 'warning',
+                    mode: 'sticky'
+                });
+                toastEvent.fire();
+                console.log('Record deleted successfully');
+            }
+        });
+        $A.enqueueAction(action);
+        }
+        else{
+            var toastEvent = $A.get("e.force:showToast");
+                toastEvent.setParams({
+                    "title": "Success!",
+            "type" : 'success',
+            "message": "The record has been saved successfully."
+                });
+                toastEvent.fire();
+                console.log('Record deleted successfully');            
+        }
+    },
+    
+    showSuccessToast : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": "Success!",
+            "type" : 'success',
+            "message": "The record has been saved successfully."
+        });
+        toastEvent.fire();
+    },
+    
+    showError : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            title : 'Error',
+            message:'The required fields cannot left blank',
+            duration:' 5000',
+            key: 'info_alt',
+            type: 'error',
+            mode: 'pester'
+        });
+        toastEvent.fire();
+    },
+    
+    navigateTo: function(component, event, helper) {
+        var homeEvt = $A.get("e.force:navigateToObjectHome");
+            homeEvt.setParams({
+                "scope": "Contract_Rules__c"});
+            homeEvt.fire();
+    }
+})
+
+
+===  Trans Contoller  ===
+
+
+({
+    doInit : function(component, event, helper) {
+        var action = component.get("c.transRuleList");
+        action.setParams({
+            recordId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            if(state === "SUCCESS"){
+                var TransList = response.getReturnValue();
+                if(TransList.length > 0) {
+                    component.set("v.FieldsToDisplay", TransList);
+                }
+                else{
+                    
+                    helper.dataTableHelper(component, event, helper);
+                }
+                //helper.dataTableHelper(component, event, helper);
+                helper.mappingRulePickList(component, event, helper);
+                helper.displaySavedFields(component, event, helper);
+            }
+            
+        });
+        $A.enqueueAction(action);
+        
+    },
+    
+        
+    addRow : function(component, event, helper) {
+        helper.dataTableHelper(component, event, helper);
+        component.set("v.hidden", true);
+    },
+    
+    newAddRow : function(component, event, helper) {
+        
+        helper.ifElseAdd(component, event, helper);
+    },
+    
+    addRowTable : function(component, event, helper) {
+        helper.textAreaAdd(component, event, helper);
+    },
+    
+    waffle : function(component, event, helper) {
+        var TransformFields = component.get("v.FieldsToDisplay");
+        //console.log('check-->', TransformFields);
+        var index = event.target.name;
+        //console.log('check-->', index);
+        component.set("v.indexVariable", index);
+        //console.log('check',TransformFields[index].Transformation_Type__c);
+        var transformType = TransformFields[index].Transformation_Type__c;
+        
+        if(transformType != '' && transformType != null && transformType != undefined){
+           component.set("v.openModal",true);
+            component.set('v.Transformation', transformType);
+        }
+        else{
+            helper.showError(component, event, helper);
+        }
+        
+        component.set("v.FieldsToDisplay", TransformFields);
+    },
+    
+    closeEventPopup : function(component,event,helper){
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.openModal',false);
+	},
+    
+    cancel: function(component,event,helper){
+        
+        component.set("v.hidden", false);
+        //$A.get('e.force:refreshView').fire();
+        //helper.navigateTo(component,event,helper);
+    },
+    
+    save : function(component,event,helper){
+        if(component.get("v.Transformation") == 'If-Else'){
+            var ifValue1 = component.find("object").get("v.value");
+            var ifValue2 = component.find("operator").get("v.value");
+            var ifValue3 = component.find("type").get("v.value");
+            var ifValue4 = component.find("value").get("v.value");
+            var ifValue5 = component.find("then").get("v.value");
+            var ifValue6 = component.find("else").get("v.value");
+            
+            var ifVal = 'IF'+'{'+'('+'"'+'Status'+'"'+' '+ifValue2+'  '+'"'+ifValue4+'"'+')'+'}'+'          '+'THEN'+'{'+'('+'"'+ifValue5+'"'+'}'+')'+' '+'ELSE'+'{'+'('+'"'+ifValue6+'"'+')'+'}'
+            console.log('-->', ifVal);
+            var Index = component.get('v.indexVariable');
+            var ifList = component.get('v.FieldsToDisplay');
+            ifList[Index].Transformation_Value__c = ifVal;
+            component.set("v.FieldsToDisplay", ifList);
+        }
+       else if(component.get("v.Transformation") == 'Text Split'){
+            var Value1 = component.find("fieldText").get("v.value");
+            var Value2 = component.find("preText").get("v.value");
+            var Value3 = component.find("startText").get("v.value");
+            var Value4 = component.find("endText").get("v.value");
+            var Value5 = component.find("postText").get("v.value");
+            
+            var textVal = '<'+Value1+'*'+Value2+Value3+'*'+Value4+'*'+Value5+ '>'
+            console.log('-->', textVal);
+            var Index = component.get('v.indexVariable');
+            var tList = component.get('v.FieldsToDisplay');
+            tList[Index].Transformation_Value__c = textVal;
+            component.set("v.FieldsToDisplay", tList);
+        }
+        
+        else if(component.get("v.Transformation") == 'Text Area Split'){
+            var areaValue1 = component.find("fieldText").get("v.value");
+            var areaValue2 = component.find("line").get("v.value");
+            var areaValue3 = component.find("pre").get("v.value");
+            var areaValue4 = component.find("start").get("v.value");
+            var areaValue5 = component.find("end").get("v.value");
+            var areaValue6 = component.find("post").get("v.value");
+
+            var textAreaVal = '<'+areaValue1+'*'+'<'+areaValue2+'*'+'*'+areaValue3+'*'+areaValue4+'*'+areaValue5+areaValue6+ '>'+'*'
+            console.log('-->', textAreaVal);
+            var Index = component.get('v.indexVariable');
+            var tAreaList = component.get('v.FieldsToDisplay');
+            tAreaList[Index].Transformation_Value__c = textAreaVal;
+            component.set("v.FieldsToDisplay", tAreaList);
+        }
+        component.set('v.openModal',false);
+    },
+    
+    insertRecord : function(component,event,helper){
+        //component.set('v.openModal',false);
+        component.set('v.AddModal',false);   
+    },
+    
+    
+    NewSave : function(component,event,helper){
+        if(helper.validation(component, event, helper)){
+            helper.newSaveRule(component, event, helper);
+        }
+    },
+    
+    deleteRecord : function(component, event, helper){
+        console.log('check');
+        var RuleToDelete = component.get("v.FieldsToDisplay");
+        var selectedRow = event.currentTarget;
+        helper.deleteTable(component, event, helper, RuleToDelete[selectedRow.dataset.record]);
+        var index = selectedRow.dataset.record;
+        RuleToDelete.splice(index, 1);
+       // var recordToDelete = RuleToDelete[index];
+           component.set("v.FieldsToDisplay", RuleToDelete);
+       	
+    },
+    
+    deleteIfElseRecord : function(component, event, helper){
+        var ifElse = component.get("v.ifElse");
+        var selectedItem = event.currentTarget;
+        var index = selectedItem.dataset.record;
+        ifElse.splice(index, 1);
+        component.set("v.ifElse", ifElse);
+    },
+    
+    deleteTextAreaRecord : function(component, event, helper){
+        var tArea = component.get("v.textArea");
+        var selectedItem = event.currentTarget;
+        var index = selectedItem.dataset.record;
+        tArea.splice(index, 1);
+        component.set("v.textArea", tArea);
+    },
+    
+})
+
+
+=== Trans CSS ===
+
+.THIS .slds-form-element__control .slds-radio{
+        display: inline !important;
+    
+    }
+
+============================================================================================================================================================
+
+Transformation Rule Child
+
+=== Trans Child Comp ===
+
+<aura:component controller = "TransformationController" implements="force:appHostable,flexipage:availableForAllPageTypes,flexipage:availableForRecordHome,force:hasRecordId" access="global" >	
+    
+    <aura:attribute name="sObjectName" type="String" default="Mapping_Rules__c"/>
+    <aura:attribute name="openModal" type="boolean" default="false"/>
+    <aura:attribute name="trans" type="object"/>
+    <aura:attribute name="index" type="integer"/>
+    <aura:attribute name="target" type="list"/>
+    <aura:attribute name="source" type="list"/>
+    <aura:attribute name="TransformationType" type="list"/>
+    <aura:attribute name="Transformation" type="string"/>
+    
+    <aura:attribute name="objMapRule" type="String"/>
+    <aura:attribute name="objSource" type="string"/>
+    <aura:attribute name="objBreadCrumb" type="string"/>
+    <aura:attribute name="hidden" type="boolean" default="false"/>
+    <aura:attribute name="objCondition" type="Object" default="{}"/>
+    <aura:attribute name="hideObjRef" type="boolean" default="false"/>
+    <aura:attribute name="AddModal" type="boolean" default="false"/>
+    <aura:attribute name="objSelected" type="boolean" default="false"/>
+    <aura:attribute name="mappCont" type="Object"/>
+    <aura:attribute name="contRule" type="Object"/>
+    <aura:attribute name="objSelectLabel" type="String"/>
+    <aura:attribute name="objSelectValue" type="String"/>
+    <aura:attribute name="objSelectObject" type="String"/>
+    <aura:attribute name="objDisableValue" type="boolean" default="false"/>
+    
+    
+    <aura:attribute name="breadcrumbsObjReference" type="Object[]"/>
+    <aura:attribute name="recordId" type="Id"/>
+    <aura:attribute name="objFieldRec" type="list"/>
+        <aura:attribute name="objFieldsRef" type="Map"/>
+    
+    
+    
+    <aura:attribute name="textSplit" type="object[]"/>
+    
+    <aura:attribute name="ifElseAddCon" type="Object"/>
+    
+    <aura:attribute name="textAreaValue" type="List"/>
+    <aura:attribute name="textAreaSplit" type="object[]"/>
+    
+    <aura:attribute name="objRef" type="object"/>
+    
+    <aura:attribute name="salesforce" type="list"/>
+    <aura:attribute name="radioValue" type="String"/>
+    <aura:attribute name="options" type="list" default="[
+                                                        {'label': 'ALL', 'value': 'Condition-1'},
+                                                        {'label': 'ANY', 'value': 'Condition-1, Condition-2'},
+                                                        {'label': 'CUSTOM', 'value': 'Condition-1, Condition-2'}]"/>
+    
+    <aura:handler name="init" value="{!this}" action="{!c.Init}"/>
+    
+    <td >
+        <lightning:select name="transtype" class="slds-align_left slds-p-bottom_large" value="{!v.trans.Transformation_Type__c}" onchange = "{!c.transValue}">
+            <aura:iteration items="{!v.TransformationType}" var="field">
+                <aura:if isTrue = "{!v.trans.Transformation_Type__c == field}">
+                    <option value="{!field}" selected="selected">{!field}</option>
+                    <aura:set attribute = "else">
+                        <option value="{!field}">{!field}</option>
+                    </aura:set> </aura:if>
+            </aura:iteration>
+        </lightning:select>
+    </td>
+    <td >
+        <lightning:textarea aura:id="transValue" class="slds-align_left slds-p-bottom_medium" name="transvalue" disabled="true" type="text" value="{!v.trans.Transformation_Value__c}" />
+        
+    </td>
+    <td >
+        <a name="{!v.index}" onclick="{!c.waffle}">
+            <lightning:dynamicIcon class="slds-align_absolute-center" type="waffle"  alternativeText="Default Transformation" onclick="{!c.waffle}" onchange = "{!c.transValue}"/>
+        </a>
+        
+    </td>
+    <td>
+        <lightning:select name="target" class="slds-align_left slds-p-bottom_large" value="{!v.trans.Target_Field__c}" onchange = "{!c.transValue}">
+            <option value="">None</option>
+            <aura:iteration items="{!v.target}" var="field">
+                <aura:if isTrue = "{!v.trans.Target_Field__c == field}">
+                    <option value="{!field}" selected="selected">{!field}</option>
+                    <aura:set attribute = "else">
+                        <option value="{!field}">{!field}</option>
+                    </aura:set> </aura:if>
+            </aura:iteration></lightning:select>
+    </td>
+    <td >
+        <div class="slds-align_absolute-center">
+            <lightning:input name="mandatory"  type="checkbox" value="{!v.trans.Mandatory__c}" onchange = "{!c.transValue}"/>
+        </div>
+    </td>
+    
+    
+    <!-- Modal Popup-->
+    
+    <aura:if isTrue="{!v.openModal}">
+        <section role="dialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_small">
+            <div class="slds-modal__container">
+                
+                <!--popup header-->
+                <!--lightning:buttonIcon iconName="utility:close" onclick="{! c.closeModalPopup }"
+                                      alternativeText="Close window"
+                                      variant="brand-outline"
+                                      class="slds-modal__close"/-->
+                <div class="slds-modal__header">
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Default'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Default Transformation</h1>
+                    </aura:if>
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Direct'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Direct Transformation</h1>
+                    </aura:if>
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'If-Else'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">If-Else Transformation</h1>
+                    </aura:if>
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Object Reference'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Object Reference Transformation</h1>
+                    </aura:if>
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Text Split'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Text Split Transformation</h1>
+                    </aura:if>
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Text Area Split'}">
+                        <h1 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Text Area Split Transformation</h1>
+                    </aura:if>
+                </div>
+                
+                <!-- Popup Body -->
+                
+                <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Default'}">
+                        <div class="slds-col slds-size_1-of-1">
+                            <lightning:input aura:id="default" value="{!v.trans.Transformation_Value__c}" name="defaultvalue" type="text" label="Default Value"/>
+                        </div>
+                    </aura:if>
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Direct'}">
+                        <div class="slds-col slds-size_1-of-1">
+                            <lightning:select aura:id="direct" name="transvalue" value="{!v.trans.Transformation_Value__c}" label="Field Name">
+                                <option selected="selected">--None--</option>
+                                <aura:iteration items="{!v.source}" var="field">
+                                    <option value="{!field}">{!field}</option>
+                                </aura:iteration></lightning:select></div>
+                    </aura:if>
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'If-Else'}">
+                        
+                        <p class="slds-box slds-theme_shade slds-col slds-size_1-of-1" style="font-size:15px"><b>Condition</b></p>
+                        <aura:iteration items="{!v.ifElseAddCon.addCondition}" var="fld" indexVar="index">
+                            <div class="slds-float_left"><b>If</b></div>
+                            
+                            <div class="slds-float_right">
+                                <lightning:buttonIcon iconName="utility:add" name="{!index}" variant="bare" size="small" alternativeText="Indicates add" onclick="{!c.showCondition}"/>
+                                <lightning:buttonIcon iconName="utility:dash" name="{!index}" variant="bare" size="small" alternativeText="Indicates dash" onclick="{!c.hideCondition}"/>
+                            </div>
+                            
+                            
+                            <!--   If-Else Table  --> 
+                            
+                            <br/>
+                            <div class="slds-box">
+                                <h1> <b> Condition - {!index + 1}</b>
+                                    <div class="slds-float_right">
+                                        <lightning:radioGroup name="conditions"
+                                                              options="{! v.options }"
+                                                              value="{! v.radioValue }"
+                                                              type="radio"
+                                                              style="display:inline-block !important"/>
+                                    </div>
+                                </h1>
+                                
+                                <!-- Table Head -->
+                                
+                                <table class="slds-table slds-border_left slds-border_right slds-border_top slds-border_bottom slds-max-medium-table_stacked"> 
+                                    <thead>	
+                                        <tr class="slds-text-title_caps" style = "height : 40px;">
+                                            <th scope="col" width="10%">
+                                                <div class="slds-align_absolute-center">SL.NO</div>
+                                            </th>
+                                            <th scope="col" width="20%">
+                                                <div class="slds-align_absolute-center" title="line"><p class="required">*</p>FIELD</div>
+                                            </th>
+                                            <th scope="col" width="20%">
+                                                <div class="slds-align_absolute-center" title="pre"><p class="required">*</p>OPERATOR</div>
+                                            </th>
+                                            <th scope="col" width="20%">
+                                                <div class="slds-align_absolute-center" title="start"><p class="required">*</p>TYPE</div>
+                                            </th>
+                                            <th scope="col" width="20%">
+                                                <div class="slds-align_absolute-center" title="end"><p class="required">*</p>VALUE</div>
+                                            </th>
+                                            <th width="10%">
+                                                <div class="slds-align_absolute-center" title="Delete">DELETE</div>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <aura:iteration items="{!fld.tablecondition}" var="con" indexVar="index1">
+                                            <tr class="slds-table slds-table_cell-buffer slds-table_bordered slds-border_left slds-border_right slds-border_top slds-border_bottom">
+                                                <td width="5%"><div class="slds-align_absolute-center">
+                                                    {!index1 + 1}
+                                                    </div>
+                                                </td>    
+                                                <td width="20%">
+                                                    <div class="slds-align_absolute-center slds-p-bottom_large">
+                                                        <lightning:select aura:id="object" name="objRef" value="{!con.Field}" >
+                                                            <option selected="selected">None</option>
+                                                            <aura:iteration items="{!v.source}" var="field">
+                                                                <option value="{!field}">{!field}</option>
+                                                            </aura:iteration>
+                                                        </lightning:select>
+                                                    </div>
+                                                </td>
+                                                <td width="15%">
+                                                    <div class="slds-align_absolute-center slds-p-bottom_large">
+                                                        <lightning:select aura:id="operator" name="optr" value="{!con.Operator}">
+                                                            <option selected="selected">Select</option>
+                                                            <option >EQUALS</option>
+                                                            <option >DOES NOT EQUALS</option>
+                                                            <option >GREATER THAN</option>
+                                                            <option >LESS THAN</option>
+                                                        </lightning:select>
+                                                    </div>
+                                                </td>
+                                                <td width="15%">
+                                                    <div class="slds-align_absolute-center slds-p-bottom_large">
+                                                        <lightning:select aura:id="type" name="type" value="{!con.Type}">
+                                                            <option selected="selected">None</option>
+                                                            <option value="Direct">Direct</option>
+                                                        </lightning:select>
+                                                    </div>
+                                                </td>
+                                                <td width="35%">
+                                                    <div class="slds-align_absolute-center slds-p-bottom_large">
+                                                        <lightning:input aura:id="value" name="value" type="text" value="{!con.Value}"/>
+                                                    </div>
+                                                </td>
+                                                <td width="10%">
+                                                    <div class="slds-align_absolute-center slds-p-bottom_medium"> 
+                                                        <a onclick="{!c.removeIfElseRecord}" data-id="{!index}" data-record="{!index}" >
+                                                            <lightning:icon iconName="utility:delete" size="xx-small" class="slds-text-align_center" alternativeText="Delete"/>
+                                                            <span class="slds-assistive-text">DELETE</span>
+                                                        </a>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </aura:iteration>
+                                    </tbody>
+                                </table>
+                                
+                                
+                                <lightning:button variant="base" name="{!index}" label="Add Row" title="Base action" onclick="{! c.ifElseAdd }"/>
+                                
+                                <p><b>Then</b></p>
+                                <div class="slds-col slds-size_4-of-4 slds-grid" >
+                                    <lightning:input name="then"  placeholder="Direct" disabled="true" />
+                                    &nbsp; &nbsp; &nbsp;
+                                    <lightning:input aura:id="then" value="{!fld.then}" name="then" />
+                                </div>
+                            </div>
+                        </aura:iteration>
+                        <br/>
+                        <p><b>Else</b></p>
+                        <div class="slds-box slds-box_small slds-col slds-size_4-of-4 slds-grid" >
+                            <lightning:input name="else" class="slds-p-bottom_medium"  placeholder="Direct" disabled="true" />
+                            &nbsp; &nbsp; &nbsp;
+                            <lightning:input aura:id="else" value="{!v.ifElseAddCon.else}"  name="else"/>
+                        </div>
+                    </aura:if>
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Object Reference'}">
+                        <aura:if isTrue="{!v.hideObjRef}">
+                        <p class="slds-box slds-theme_shade slds-col slds-size_1-of-1" style="font-size:10px"><b>General Information</b></p> 
+                        
+                        <div class="slds-grid slds-gutters slds-p-left_medium " id="modal-content-id-1">
+                            <label class="slds-p-top_large"><p class="required">*</p>Object</label>
+                            &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;                                                 
+                            <lightning:input type="text" name="object" disabled="true" value="{!v.objCondition.object}" class="slds-float_center  slds-p-left_xx-large"/>
+                        </div>
+                        
+                        <div class="slds-grid slds-gutters slds-p-left_medium " id="modal-content-id-1">
+                            <label class="slds-p-top_large"><p class="required">*</p>Lookup Field</label>     
+                            &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+                            <lightning:input type="text"  name="Lookup Field" disabled="true" value="{!v.objCondition.objTarget}" class="slds-float_center slds-p-left_xx-large"/>
+                            <lightning:dynamicIcon type="waffle" onclick="{! c.handleClick}" alternativeText="Application launcher" class="slds-p-top_large slds-p-left_x-large"/><br/>         
+                        </div>
+                            <br/>
+                            <h1 class="slds-box slds-theme_shade slds-col slds-size_1-of-1" style="font-size:10px"><b>Filter Conditions</b></h1> 
+                        <div class="slds-align_absolute-center" style="height:4rem">No filter condition available.
+                            <lightning:button variant="base" label="Add" title="Base action" />
+                            one.
+                        </div>
+                        </aura:if>
+                        <!-- Object Reference Modal -->
+                        
+                        <aura:if isTrue = "{!v.AddModal}">  
+                            <section role="editdialog" tabindex="-1" aria-modal="true" aria-labelledby="modal-heading-01" class="slds-modal slds-fade-in-open slds-modal_small">
+                                <div class="slds-modal__container" style="width:100% !important;">
+                                    <div class="slds-modal__header">
+                                        <lightning:buttonIcon iconName="utility:close" onclick="{! c.closeEventPopup }"
+                                                              alternativeText="Close window"
+                                                              variant="bare-inverse"
+                                                              class="slds-modal__close"/>
+                                        <h1 class="slds-text-heading--medium">Object Reference - Select Field</h1></div>
+                                    <div class="slds-modal__content slds-p-around--large slds-grid slds-wrap ">
+                                        <div class="slds-col slds-size_1-of-1">
+                                            <lightning:breadcrumbs>
+                                                <aura:iteration items="{! v.breadcrumbsObjReference }" var="objBreadcrumb">
+                                                    <lightning:breadcrumb label="{! objBreadcrumb.label }" onclick="{! c.navigateTo }" name="{! objBreadcrumb.name }"/>
+                                                </aura:iteration>
+                                            </lightning:breadcrumbs>
+                                            
+                                            <aura:if isTrue="{!not(v.objSelected)}">
+                                            <lightning:select aura:id="objField" name="objField" label="Field Name" value="{!v.objSelectValue}" onchange = "{!c.objFldChange}" disabled="{!v.objDisableValue}">
+                                                <option value="">None</option>
+                                                <aura:iteration items="{!v.objFieldRec}" var="field">
+                                                    <aura:if isTrue="{!v.objSelectValue == field}">
+                                                    <option value="{!field.value}" selected="selected">{!field.label}</option>
+                                                        <aura:set attribute="else">
+                                                            <option value="{!field.value}">{!field.label}</option>
+                                                        </aura:set>
+                                                    </aura:if>
+                                                </aura:iteration>
+                                            </lightning:select>
+                                                <aura:set attribute="else">
+                                                <div class="slds-p-left_small">
+                                                    <lightning:tile  label="{!v.objSelectLabel}" class=" slds-p-top_medium" >
+                                                        <aura:set attribute="media">
+                                                            <lightning:icon iconName="doctype:library_folder" size="Large"/>
+                                                        </aura:set>
+                                                        <dl class="slds-dl_horizontal">
+                                                            <dt>
+                                                                <p>Object :</p>
+                                                            </dt>
+                                                            <dd>
+                                                                <p class="slds-float_left">{!v.objSelectObject}</p>
+                                                            </dd>
+                                                        </dl>
+                                                        <dl class="slds-dl_horizontal">
+                                                            <dt>
+                                                                <p>API Name :</p>
+                                                            </dt>
+                                                            <dd >
+                                                                <p class="slds-float_left">{!v.objSelectValue}</p>
+                                                            </dd>
+                                                        </dl>
+                                                    </lightning:tile>
+                                                </div>
+                                            </aura:set>
+                                            </aura:if>
+                                    </div>
+                                    </div>
+                                    <div class="slds-modal__footer">                
+                                        <lightning:button variant="neutral" label="Cancel" onclick="{!c.closeEventPopup}"/>
+                                        <lightning:button variant="brand" label="Insert" onclick="{!c.insertRecord}" />
+                                    </div>
+                                </div>
+                            </section>
+                        </aura:if>
+                    </aura:if>
+                    
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Text Split'}">
+                        <div class="slds-size_1-of-1 slds-p-horizontal_large">
+                            <lightning:select aura:id="fieldText" name="textsplit" required="true" value="{!v.textSplit.FieldName}" label="Field Name" >
+                                <option selected="selected">--None--</option>
+                                <aura:iteration items="{!v.source}" var="field">
+                                    <option value="{!field}">{!field}</option>
+                                </aura:iteration></lightning:select></div>
+                        <div class="slds-size_1-of-1 slds-grid">
+                            <lightning:input aura:id="preText"  type="text" name="textsplit" value="{!v.textSplit.preText}"  label="Pre Value" class="slds-col slds-size_1-of-2 slds-p-horizontal_large"/>                                                
+                            <lightning:input aura:id="postText"  type="text" name="textsplit" value="{!v.textSplit.postText}" label="Post Value" class="slds-col slds-size_1-of-2 slds-p-horizontal_large"/>
+                        </div>
+                        <div class="slds-size_1-of-1 slds-grid">
+                            <lightning:input aura:id="startText"  type="text" required="true" value="{!v.textSplit.startText}" name="textsplit"  label="Start Position" class="slds-col slds-size_1-of-2 slds-p-horizontal_large"/>
+                            <lightning:input aura:id="endText"  type="text" required="true" value="{!v.textSplit.endText}" name="textsplit" label="End Position" class="slds-col slds-size_1-of-2 slds-p-horizontal_large"/>
+                        </div>
+                    </aura:if>
+                    
+                    
+                    <aura:if isTrue="{!v.trans.Transformation_Type__c == 'Text Area Split'}">
+                        <p class="slds-box slds-theme_shade slds-col slds-size_1-of-1" style="font-size:10px"><b>General Information</b></p>
+                        <div class="slds-grid slds-gutters slds-p-left_medium">
+                            <br/>
+                            <label class="slds-p-top_large"><p class="required">*</p>Field Name</label>
+                            &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+                            <lightning:select aura:id="fieldText" name="textsplit" value="{!v.textAreaSplit.Name}">
+                                <option selected="selected">--None--</option>
+                                <aura:iteration items="{!v.target}" var="field">
+                                    <option value="{!field}">{!field}</option>
+                                </aura:iteration></lightning:select><br/></div>
+                        <div><br/>        
+                            <table class="slds-table slds-border_left slds-border_right slds-border_top slds-border_bottom"> 
+                                <thead>	
+                                    <tr class="slds-text-title_caps" style = "height : 40px;">
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center"></div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center" title="line"><p class="required">*</p>LINE NO</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center" title="pre">PRE-VALUE</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center" title="start"><p class="required">*</p>START-POS</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center" title="end"><p class="required">*</p>END-POS</div>
+                                        </th>
+                                        <th scope="col">
+                                            <div class="slds-align_absolute-center" title="post">POST-VALUE</div>
+                                        </th>
+                                        <th>
+                                            <div class="slds-align_absolute-center" title="Delete">DELETE</div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <aura:iteration items="{!v.textAreaValue}" var="fld" indexVar="index">
+                                        <tr class="slds-table slds-border_left slds-border_right slds-border_top slds-border_bottom">
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    {!index + 1}
+                                                </div>
+                                            </td>    
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <lightning:input name="line" aura:id="line" value="{!fld.lineArea}" type="text"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <lightning:input name="pre" aura:id="pre" value="{!fld.preArea}" type="text"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <lightning:input name="start" aura:id="start" value="{!fld.startArea}" type="text"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <lightning:input name="end" aura:id="end" value="{!fld.endArea}" type="text"/>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <lightning:input name="post" aura:id="post" value="{!fld.postArea}" type="text"/>
+                                                </div>
+                                            </td>
+                                            <td> 
+                                                <div class="slds-align_absolute-center slds-p-bottom_small">
+                                                    <a onclick="{!c.deleteTextAreaRecord}" data-record="{!index}" >
+                                                        <lightning:icon iconName="utility:delete" size="xx-small" class="slds-text-align_center" alternativeText="Delete"/>
+                                                        <span class="slds-assistive-text">DELETE</span>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </aura:iteration>
+                                </tbody>
+                            </table>
+                            <div><br/>
+                                <lightning:button Name="Add Row" label="Add Row" variant="Neutral" onclick="{!c.addRowTable}"/>
+                            </div> </div>       
+                    </aura:if>
+                </div>
+                <footer class="slds-modal__footer">
+                    <lightning:button variant="neutral" label="Cancel" title="Cancel" onclick="{! c.closeModalPopup }"/>
+                    <lightning:button variant="brand" label="Save" title="Save" onclick="{!c.save}"/>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open" role="presentation"></div>
+    </aura:if>
+    
+</aura:component>
+
+
+===  Trans Child Helper  ===
+
+({
+    
+    mappingRulePickList : function(component, event, helper) {
+        var action = component.get("c.getTransformationType");
+        action.setParams({
+            recordId :component.get("v.recordId")
+        });       
+        action.setCallback(this, function(response){
+            var state = response.getState();            
+            if(state=="SUCCESS"){
+                var tType = response.getReturnValue();
+                console.log('type-->', tType);
+                component.set("v.TransformationType", tType[0]);
+                component.set("v.target", tType[1]);
+                component.set("v.source", tType[2]);
+            }
+        });
+        $A.enqueueAction(action);
+    },
+    
+    
+    ifRecAdd : function(component, event, helper) {
+        
+        console.log('gogo');
+        
+        var ifElseAddCon = {};
+        ifElseAddCon.addCondition = [];
+        var ifElseRecVal = {};
+        console.log('gege',ifElseRecVal);
+        ifElseRecVal.tablecondition = [];
+        
+        var ifRows = {};
+        ifRows.Field = '';
+        ifRows.Operator = '';
+        ifRows.Type = '';
+        ifRows.Value = '';
+        ifElseRecVal.tablecondition.push(ifRows);
+        ifElseRecVal.Then = '';
+        ifElseAddCon.addCondition.push(ifElseRecVal);
+        ifElseAddCon.Else = '';
+        component.set("v.ifElseAddCon", ifElseAddCon);
+        
+    },
+    
+    textAreaAdd : function(component, event, helper) {
+        var textAreaValue = component.get("v.textAreaValue");
+        textAreaValue.push({
+            
+        });
+        component.set("v.textAreaValue", textAreaValue);
+    },	
+    
+    
+    showSuccessToast : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            "title": "Success!",
+            "type" : 'success',
+            "mode" : 'dismissible',
+            "duration" : 5000,
+            "message": "The record has been saved successfully."
+        });
+        toastEvent.fire();
+    },
+    
+    ObjBreadCrumbs : function(component, event, helper) {
+        console.log('111111111');
+   		var action = component.get("c.getMappingContractRule");
+        action.setParams({
+            RecId : component.get("v.recordId")
+        });
+        action.setCallback(this, function(response){
+            console.log('222222222');
+            var state = response.getState();
+            console.log('state', state);
+            if(state === "SUCCESS"){
+                var result = response.getReturnValue();
+                console.log('result===>', result);
+                component.set('v.mappCont', result[1][0]);
+                component.set('v.contRule', result[0][0]);
+                var mapRec = component.get("v.mappCont");
+                console.log('mapRec', mapRec);
+                if(mapRec.Source_Datastore__c == 'Salesforce'){              
+                    var breadcrumbCollection = [
+                        {label: component.get('v.contRule').Source_Object__c, name: component.get('v.contRule').Source_Object__c,
+                         reference: component.get('v.contRule').Source_Object__c}
+                    ];
+                    component.set("v.breadcrumbsObjReference", breadcrumbCollection);
+                }   
+                else{
+                    var breadcrumbCollection = [
+                        {label: component.get('v.contRule').Target_Object__c, name: component.get('v.contRule').Target_Object__c,
+                         reference: component.get('v.contRule').Target_Object__c}
+                    ];
+                    component.set("v.breadcrumbsObjReference", breadcrumbCollection);
+                }
+                helper.getLookupRec(component, event, helper);
+            }
+        });
+        $A.enqueueAction(action);
+    
+    },
+    
+    getLookupRec : function(component, event, helper){
+        console.log('getLookupRec');
+        var sourceObj;
+        if(component.get('v.mappCont').Source_Datastore__c == 'Salesforce'){
+                    sourceObj = component.get('v.contRule').Source_Object__c;
+                	}
+                else{
+                    sourceObj = component.get('v.contRule').Target_Object__c;
+              	}
+        var action = component.get("c.fetchLookupFields");
+        action.setParams({
+            sourceObjName :getSrcObject
+        });
+        action.setCallback(this, function(response){
+            var state = response.getState();
+            console.log('newState', state);
+            if(state === "SUCCESS"){
+                var result = response.getReturnValue();
+                component.set("v.objFieldRec",result.picklistValues);
+                component.set("v.objFieldsRef",result.picklistReference);
+            }
+            
+        });
+        
+        $A.enqueueAction(action);
+    },
+    
+    showError : function(component, event, helper) {
+        var toastEvent = $A.get("e.force:showToast");
+        toastEvent.setParams({
+            title : 'Error',
+            message:'The required fields cannot left blank',
+            duration:' 5000',
+            key: 'info_alt',
+            type: 'error',
+            mode: 'pester'
+        });
+        toastEvent.fire();
+    }
+})
+
+
+===  Trans Child Controller  ===
+
+({
+    Init : function(component, event, helper) {
+        
+        if(component.get("v.trans.Transformation_Type__c") == 'If-Else'){
+            console.log('if-else incoming');
+            if(component.get("v.trans.Transformation_Value__c") != '' && component.get("v.trans.Transformation_Value__c") != null && component.get("v.trans.Transformation_Value__c") != undefined){
+                var ifElseSave = JSON.parse(component.get("v.trans.Transformation_Value__c"));
+                console.log('if-else incomingxxx', ifElseSave);   
+                component.set("v.ifElseAddCon", ifElseSave);
+            }
+            else{
+                helper.ifRecAdd(component, event, helper);
+            }
+        }
+        
+        else if(component.get("v.trans.Transformation_Type__c") == 'Text Split'){
+                var textRec = JSON.parse(component.get("v.trans.Mapping_Split_Rec__c"));
+                console.log('text', textRec);
+                component.set("v.textSplit.FieldName", textRec.FieldName);
+                component.set("v.textSplit.preText", textRec.pre);
+                component.set("v.textSplit.postText", textRec.post);
+                component.set("v.textSplit.startText", textRec.start);
+                component.set("v.textSplit.endText", textRec.end);
+            }
+        
+        else if(component.get("v.trans.Transformation_Type__c") == 'Text Area Split'){
+            var valueRec = JSON.parse(component.get("v.trans.Mapping_Split_Rec__c"));
+            console.log('WaffleCheck', valueRec);
+            component.set('v.textAreaValue',valueRec)
+            component.set("v.textAreaSplit.Name", valueRec[0].transName);
+        }
+        
+       else if(component.get('v.trans.Transformation_Type__c') == 'Object Reference' ){
+            if(component.get("v.trans.Transformation_Value__c") != '' && component.get("v.trans.Transformation_Value__c") != null && component.get("v.trans.Transformation_Value__c") != undefined){
+                var objTemp = JSON.parse(component.get("v.trans.Transformation_Value__c"));
+                
+                console.log('objTemp');
+                component.set("v.ObjectReference", objTemp);
+            }
+            else{
+                var ObjectReference = {};
+                if(component.get('v.mappingContract').Source__c == 'Salesforce'){
+                    ObjectReference.object = component.get('v.contRule').Source_Object__c;
+                    
+                }
+                else{
+                    ObjectReference.object = component.get('v.contRule').Target_Object__c;
+                    
+                }
+                ObjectReference.lookup = '';
+                component.set("v.objCondition", ObjectReference);
+            }
+        }
+        helper.mappingRulePickList(component, event, helper);
+        helper.ObjBreadCrumbs(component, event, helper);
+    },
+    
+    waffle : function(component, event, helper) {
+        console.log('Check');
+        
+        if(component.get("v.trans.Transformation_Type__c") != '' && component.get("v.trans.Transformation_Type__c") != null && component.get("v.trans.Transformation_Type__c") != undefined){
+            component.set("v.openModal",true);
+            component.set("v.hidden", true);
+        component.set("v.hideObjRef", true);
+            //component.set('v.objValidation',true);
+        }
+        else{
+            helper.showError(component, event, helper);
+        }
+    },
+    
+    ifElseAdd : function(component, event, helper) {
+        
+        var ifelseVal = component.get("v.ifElseAddCon.addCondition");
+        var oldData = ifelseVal[event.getSource().get("v.name")];
+        console.log("==>", oldData);
+        var ifRows = {};
+        ifRows.Field = '';
+        ifRows.Operator = '';
+        ifRows.Type = '';
+        ifRows.Value = '';
+        oldData.tablecondition.push(ifRows);
+        ifelseVal[event.getSource().get("v.name")] = oldData;
+        component.set("v.ifElseAddCon.addCondition", ifelseVal);
+        
+    },
+    
+    addRowTable : function(component, event, helper) {
+        helper.textAreaAdd(component, event, helper);
+    },
+    
+    showCondition : function(component, event, helper) {
+        
+        var ifElseCon = component.get("v.ifElseAddCon.addCondition");
+        var ifConVal = {};
+        ifConVal.tablecondition = [];
+        var ifRows = {};
+        ifRows.Field = '';
+        ifRows.Operator = '';
+        ifRows.Type = '';
+        ifRows.Value = '';
+        ifConVal.tablecondition.push(ifRows);
+        ifConVal.Then = '';
+        var ifElseVal = [];
+        for(var i=0; i<ifElseCon.length; i++){
+            
+            ifElseVal.push(ifElseCon[i]);
+            if(i == event.getSource().get("v.name")){
+                
+                ifElseVal.push(ifConVal);
+            }
+        }
+        
+        ifElseCon = ifElseVal;
+        component.set("v.ifElseAddCon.addCondition", ifElseCon);
+    },
+    
+    hideCondition : function(component, event, helper) {
+        var index = event.getSource().get("v.name");
+        var IfElseCon = component.get("v.ifElseAddCon.addCondition");
+        if(IfElseCon.length>1){
+            
+            IfElseCon.splice(index,1);
+            component.set("v.ifElseAddCon.addCondition", IfElseCon);
+        }
+        
+    },
+    
+    handleClick : function(component,event,helper){
+        
+        component.set('v.AddModal',true);
+        component.set('v.hideObjRef',false);
+            
+        //component.set('v.objValidation',false);
+    },
+    
+    closeModalPopup : function(component,event,helper){
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.openModal',false);
+    },
+    
+    closeEventPopup : function(component,event,helper){
+        var cmpTarget = component.find('editDialog');
+        var cmpBack = component.find('overlay');
+        $A.util.removeClass(cmpBack,'slds-backdrop--open');
+        $A.util.removeClass(cmpTarget, 'slds-fade-in-open');
+        component.set('v.AddModal',false);
+        component.set('v.hideObjRef',true);
+    },
+    
+    removeIfElseRecord : function(component, event, helper){
+        var ifElse = component.get("v.ifElseAddCon.addCondition");
+        var selectedIfElseRec = ifElse[event.target.dataset.id];
+        if(selectedIfElseRec.tablecondition.length>1){
+            
+            selectedIfElseRec.tablecondition.splice(event.currentTarget.dataset.record,1);
+            ifElse[event.target.dataset.id] = selectedIfElseRec;
+            component.set("v.ifElseAddCon.addCondition", ifElse);
+            
+        }
+        
+    },
+    
+    deleteTextAreaRecord : function(component, event, helper){
+        var tArea = component.get("v.textAreaDefault");
+        var selectedItem = event.currentTarget;
+        var index = selectedItem.dataset.record;
+        tArea.splice(index, 1);
+        component.set("v.textAreaDefault", tArea);
+    },
+    
+    transValue : function(component, event, helper){
+        
+        component.set("v.hidden", true);
+        
+        //component.set("v.trans.Transformation_Value__c", '');
+        
+        if(component.get("v.trans.Transformation_Type__c") == 'If-Else'){
+            
+            helper.ifRecAdd(component, event, helper);
+        }
+        else if(component.get("v.trans.Transformation_Type__c") == 'Text Area Split'){
+            
+            helper.textAreaAdd(component, event, helper);
+        }
+        if(component.get("v.trans.Transformation_Type__c") == 'Object Reference'){
+            var crumbsObjRef = {};
+                if(component.get('v.mappCont').Source_Datastore__c == 'Salesforce'){
+                    crumbsObjRef.object = component.get('v.contRule').Source_Object__c;
+                    
+                }
+                else{
+                    crumbsObjRef.object = component.get('v.contRule').Target_Object__c;
+                    
+                }
+            crumbsObjRef.objTarget = '';
+            crumbsObjRef.objFieldBreadCrum = [];
+            crumbsObjRef.ReturnField = '';
+            console.log('===>TestObj');
+           component.set("v.objCondition", crumbsObjRef);
+            
+        }
+    },
+    
+    insertRecord : function(component,event,helper){
+     component.set("v.objCondition", false);
+        component.set("v.hideObjRef", true);
+        
+        var objCrumbsRec = '';
+        console.log('objCrumbsRec');
+        var objInsertRec = component.get('v.objCondition');
+        console.log('objInsertRec');
+        objInsertRec.objFieldBreadCrum = component.get('v.breadcrumbsObjReference');
+        console.log('mycrumbs',component.get('v.breadcrumbsObjReference'));
+        for(var i=0; i<objInsertRec.objFieldBreadCrum.length; i++){
+            if(i == 0){
+                objCrumbsRec = objCrumbsRec + objInsertRec.objFieldBreadCrum[i]['name'];
+            }
+            else {
+                objCrumbsRec = objCrumbsRec + '.' + objInsertRec.objFieldBreadCrum[i]['name'];
+            }
+        }
+        objInsertRec.objTarget = objCrumbsRec;
+        component.set('v.objCondition', objInsertRec);  
+    },
+    
+    save : function(component,event,helper){
+        if (component.get("v.trans.Transformation_Type__c") == 'Direct' || component.get("v.trans.Transformation_Type__c") == 'Default') {
+            if(component.get("v.trans.Transformation_Value__c") != '' && component.get("v.trans.Transformation_Value__c") != null && component.get("v.trans.Transformation_Value__c") != undefined){
+                component.set("v.openModal", false);
+            }
+            else{
+                helper.showError('The required fields cannot left blank');            
+            }
+        }
+        else if (component.get("v.trans.Transformation_Type__c") == 'If-Else'){
+            
+            var ifElseRec =  component.get("v.ifElseAddCon.addCondition");
+            var isNull = 0;
+            var notEmpty = 0;
+            for(var i=0; i<ifElseRec.length; i++ ){                        
+                var ifRec = ifElseRec[i].tablecondition;
+                console.log(ifRec);
+                for(var s = 0; s<ifRec.length; s++){
+                    if(ifRec[s].Field != '' && ifRec[s].Field != null && ifRec[s].Field != undefined &&
+                       ifRec[s].Operator!= '' && ifRec[s].Operator!= null && ifRec[s].Operator != undefined &&
+                       ifRec[s].Type!= '' && ifRec[s].Type!= null && ifRec[s].Type != undefined &&
+                       ifRec[s].Value != '' && ifRec[s].Value != null && ifRec[s].Value != undefined) {
+                        
+                        notEmpty = notEmpty+1;
+                    }                             
+                    
+                    else{
+                        isNull = isNull+1;
+                    }
+                }
+            }
+            if(isNull == 0){
+                var ifElseRecList = component.get("v.ifElseAddCon");
+                component.set("v.trans.Transformation_Value__c", JSON.stringify(ifElseRecList));
+                component.set("v.openModal", false);
+            }
+            
+        }
+        
+        if(component.get("v.trans.Transformation_Type__c") == 'Object Reference'){
+            if(component.get("v.objCondition.object") != '' && component.get("v.objCondition.object") != null && component.get("v.objCondition.object") != undefined  &&
+               component.get("v.objCondition.objTarget") != '' && component.get("v.objCondition.objTarget") != null && component.get("v.objCondition.objTarget") != undefined)
+            {
+                
+                component.set("v.openModal", false);
+                var objRec = component.get("v.objCondition");
+                var crumbsRec = {};
+                crumbsRec.object = component.get("v.objCondition.object");
+                crumbsRec.objTarget = component.get("v.objCondition.objTarget");
+               
+                component.set("v.trans.Transformation_Value__c" , JSON.stringify(crumbsRec));
+            }
+            else {
+                helper.showToast('Error','Please fill all the required fields', 'error');
+            }
+        }
+        
+            else if(component.get("v.trans.Transformation_Type__c") == 'Text Split'){
+                console.log('-->TextSplit');
+                if(component.get("v.textSplit.FieldName") != '' && component.get("v.textSplit.FieldName") != null && component.get("v.textSplit.FieldName") != undefined  &&
+                   component.get("v.textSplit.startText") != '' && component.get("v.textSplit.startText") != null && component.get("v.textSplit.startText") != undefined  &&
+                   component.get("v.textSplit.endText") != '' && component.get("v.textSplit.endText") != null && component.get("v.textSplit.endText") != undefined)
+                {
+                    component.set("v.openModal", false);
+                    var textSplitRec = component.get("v.textSplit");
+                    var TextSpt = {};
+                    TextSpt.FieldName = component.get("v.textSplit.FieldName");
+                    TextSpt.preText = component.get("v.textSplit.preText");
+                    TextSpt.postText = component.get("v.textSplit.postText");
+                    TextSpt.startText = component.get("v.textSplit.startText");
+                    TextSpt.endText = component.get("v.textSplit.endText");
+                    component.set("v.trans.Mapping_Split_Rec__c" , JSON.stringify(TextSpt));
+                    
+                    var FieldName =component.get("v.textSplit.FieldName");
+                    var preText = component.get("v.textSplit.preText");
+                    var postText = component.get("v.textSplit.postText");
+                    var startText = component.get("v.textSplit.startText");
+                    var endText = component.get("v.textSplit.endText");
+                    var textSplitVal = '<'+FieldName+'*'+preText+'*'+startText+'*'+endText+'*'+postText+'>';
+                    component.set("v.trans.Transformation_Value__c" , textSplitVal);
+                }
+                else {
+                    helper.showError('The required fields cannot left blank');
+                }
+            }
+                else if(component.get("v.trans.Transformation_Type__c") == 'Text Area Split'){
+                    var transArea = component.get("v.textAreaValue");
+                    //console.log("==> textArea",component.get("v.textAreaSplit"));
+                    //console.log("==> test",component.get("v.textAreaSplit.Name"));
+                    //console.log("==> test",component.get("v.textAreaSplit.lineArea"));
+                    //console.log("==> test",component.get("v.textAreaSplit.startArea"));
+                    //console.log("==> test", component.get("v.textAreaSplit.endArea"));
+                    if(component.get("v.textAreaSplit.Name") != '' && component.get("v.textAreaSplit.Name") != null && component.get("v.textAreaSplit.Name") != undefined
+                       || transArea.length >= 1)
+                    {
+                        var transTextList = JSON.parse(JSON.stringify(component.get("v.textAreaValue")));
+                        var transName = component.get("v.textAreaSplit.Name");
+                        transTextList[0].transName = transName;
+                        // console.log('ss',transTextList);
+                        component.set("v.trans.Mapping_Split_Rec__c" , JSON.stringify(transTextList));                          
+                        var textValue = [];
+                        var transTextList = JSON.parse(JSON.stringify(component.get("v.textAreaValue")));
+                        textValue = ["<" + component.get("v.textAreaSplit.Name")+"*"];
+                        console.log('==>', textValue);
+                        
+                        for(var i=0; i<transTextList.length; i++){
+                            console.log('99999');
+                            var lineArea = transTextList[i]['lineArea'];
+                            var preArea = transTextList[i]['preArea'];
+                            var postArea = transTextList[i]['postArea'];
+                            var startArea = transTextList[i]['startArea'];
+                            var endArea = transTextList[i]['endArea'];
+                            var transArea = '<'+lineArea+'*'+'*'+startArea+'*'+endArea+'>';
+                            
+                            textValue.push(transArea) ;
+                        }
+                        textValue = textValue+'>';
+                        component.set("v.trans.Transformation_Value__c" ,textValue);
+                        component.set("v.openModal", false);
+                    }
+                    else {
+                        helper.showError('Error','The required fields cannot left blank', 'error');
+                    }
+                }
+    },
+    
+    objFldChange: function (component, event, helper) {
+        
+      console.log('testObj');
+        var objFieldSelect = component.get('v.objSelectValue');
+        var objLookupList = component.get("v.objFieldRec");
+        var index = objLookupList.findIndex(item => item.value == objFieldSelect),
+            fieldLabel = index >= 0 ? objLookupList[index].label : null;
+        if(fieldLabel.endsWith('>')){
+            var refMap = component.get('v.objFieldsRef');
+            var getCrumbsValue = component.get('v.breadcrumbsObjReference');
+            var sizeOfBreadcrumbs = getCrumbsValue.length;
+            var objCrumbs = {label: fieldLabel.replace(' >', ''), name: objFieldSelect, reference: refMap[objFieldSelect]};
+            getCrumbsValue.push(objCrumbs);
+            component.set('v.breadcrumbsObjReference', getCrumbsValue);
+            var action = component.get("c.fetchAllObjLookup");
+            action.setParams({
+                sourceObjName : refMap[objFieldSelect],
+                sizeOfBreadcrumbs : sizeOfBreadcrumbs
+            });
+            action.setCallback(this, function(response) {
+                component.set("v.objFieldRec", response.getReturnValue().picklistValue);
+                component.set("v.objFieldsRef", response.getReturnValue().picklistReference);
+            })
+            $A.enqueueAction(action);
+        }
+        else{
+            component.set('v.objDisableValue', true);
+            component.set('v.objSelected', true);
+            var getCrumbsValue = component.get('v.breadcrumbsObjReference');
+            var objCrumbs = {label: fieldLabel.replace(' >', ''), name: objFieldSelect, reference: ''};
+            getCrumbsValue.push(objCrumbs);
+            component.set('v.breadcrumbsObjReference', getCrumbsValue);
+            for(var i=0; i<getCrumbsValue.length; i++){
+                if(i == getCrumbsValue.length-1){
+                    component.set('v.objSelectLabel', getCrumbsValue[i].label);
+                    component.set('v.objSelectValue', getCrumbsValue[i].name);
+                    component.set('v.objSelectObject', getCrumbsValue[i-1].reference);
+                }
+            }             
+        }
+        
+    },
+    
+    navigateTo: function (component, event, helper) {
+        component.set('v.objDisableValue', false);
+        component.set('v.objSelected', false);
+        var objFieldSelect = event.getSource().get('v.name');
+        var getCrumbsValue = component.get("v.breadcrumbsObjReference");
+        var index = getCrumbsValue.findIndex(item => item.name == objFieldSelect),
+            objRefRec = index >= 0 ? getCrumbsValue[index].reference : null;
+        if(objRefRec != '' && objRefRec != null){
+            var action;
+            if(index == 0 && getCrumbsValue.length == 1){
+                action = component.get("c.fetchAllObjLookup");
+            }
+            else{
+                var objVal = [];
+                for(var i=0;i<= index;i++){
+                    objVal.push(getCrumbsValue[i]);
+                }
+                component.set('v.breadcrumbsObjReference', objVal);
+                var sizeOfBreadcrumbs = component.get('v.breadcrumbsObjReference').length;
+                action = component.get("c.fetchAllObjLookup");
+            }
+            action.setParams({
+                sourceObjName : objRefRec,
+                sizeOfBreadcrumbs : sizeOfBreadcrumbs
+            });
+            action.setCallback(this, function(response) {
+                component.set("v.objFieldRec", response.getReturnValue().picklistValue);
+                component.set("v.objFieldsRef", response.getReturnValue().picklistReference);
+            })
+            $A.enqueueAction(action);
+        }
+        else if(index == getCrumbsValue.length-1){
+            getCrumbsValue.splice(index, 1);
+            component.set('v.breadcrumbsObjReference', getCrumbsValue);
+            component.set('v.objSelectValue', '');
+        }
+    
+    }
+        
+})
+=================================================************************************************==========================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
